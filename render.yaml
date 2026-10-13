@@ -2,21 +2,21 @@ services:
   - type: web
     name: tradesim
     runtime: node
-    plan: starter
+    plan: free
     region: frankfurt
     buildCommand: npm ci --include=dev && npm run build
     startCommand: node --max-old-space-size=400 server/index.js
-    healthCheckPath: /login
+    healthCheckPath: /healthz
     envVars:
       - key: NODE_VERSION
         value: 22
       - key: HOST
         value: 0.0.0.0
-      - key: DATA_DIR
-        value: /var/data
+      - key: TICK_MS
+        value: 500
+      - key: GITHUB_REPO
+        value: antoniboyer31-beep/tradesim
+      - key: GITHUB_TOKEN
+        sync: false
       - key: APP_PASSWORD
         sync: false
-    disk:
-      name: tradesim-data
-      mountPath: /var/data
-      sizeGB: 1

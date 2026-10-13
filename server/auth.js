@@ -7,7 +7,7 @@ const WINDOW_MS = 15 * 60 * 1000;
 export function createAuth(password) {
   if (!password) return { enabled: false, middleware: (_req, _res, next) => next(), checkUpgrade: () => true };
 
-  const secret = crypto.randomBytes(32);
+  const secret = process.env.AUTH_SECRET || crypto.createHash('sha256').update('tradesim:' + password).digest();
   const token = crypto.createHmac('sha256', secret).update(password).digest('hex');
   const attempts = new Map();
 
