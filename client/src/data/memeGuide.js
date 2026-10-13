@@ -1,0 +1,87 @@
+export const MEME_TIPS = [
+  'Dès que ton token fait x2, revends la moitié : tu as récupéré ta mise et le reste ne peut plus te faire perdre d\'argent.',
+  "Regarde la market cap, pas le prix. Un jeton à 0,00001 $ n'est pas « pas cher » s'il y en a un milliard.",
+  'Si le créateur détient plus de 10 % de l\'offre, il peut faire chuter le prix de 90 % en un seul clic.',
+  'Un top 10 qui détient plus de 50 % de l\'offre, c\'est une poignée de portefeuilles qui décident du prix à ta place.',
+  "N'achète jamais une énorme bougie verte par FOMO : tu sers souvent de liquidité de sortie aux premiers acheteurs.",
+  'Le volume est le carburant d\'un meme coin. Volume qui s\'effondre = intérêt qui disparaît = prix qui suit.',
+  'Ne mets jamais plus de 1 à 2 % de ton capital sur un seul meme coin.',
+  'La migration sur le DEX attire du monde, mais beaucoup vendent juste après : attends-toi à un « dump de migration ».',
+  'Les tokens sans réseaux sociaux et sans histoire meurent presque toujours en moins d\'une heure.',
+  'Un rug pull arrive souvent après une belle montée rapide, quand le créateur a encore beaucoup de jetons.',
+  'Le slippage protège ton ordre : s\'il est trop bas, l\'achat échoue. S\'il est trop haut, tu peux acheter beaucoup plus cher que prévu.',
+  'Sur un petit token, vends en plusieurs fois : une grosse vente d\'un coup fait elle-même chuter le prix.',
+  'La plupart des meme coins vont à zéro. Ta rentabilité vient des quelques gagnants que tu laisses courir.',
+  'Les commentaires « LFG 🚀 » ne sont pas une analyse. Les bots et les détenteurs ont intérêt à faire monter le prix.',
+  'Fixe-toi une règle de sortie avant d\'acheter, par exemple « je coupe à -50 % ou je vends la moitié à x2 », et respecte-la.',
+];
+
+export const MEME_GUIDE = [
+  {
+    title: "🧠 Comment fonctionne un lancement de meme coin",
+    items: [
+      "<b>Lancement équitable</b> : n'importe qui peut créer un token en quelques secondes. Il démarre avec une market cap d'environ 5 000 $.",
+      "<b>Courbe de liaison (bonding curve)</b> : le prix est fixé par une formule. Chaque achat fait monter le prix, chaque vente le fait baisser. Plus la liquidité est faible, plus ça bouge.",
+      "<b>Migration</b> : à 69 000 $ de market cap, la liquidité part sur un DEX (une plateforme d'échange décentralisée). Le token devient plus « sérieux » et son prix est moins sensible aux gros ordres.",
+      "<b>Market cap = prix × nombre de jetons</b> (1 milliard ici). C'est la seule mesure qui compte pour estimer le potentiel.",
+      '<b>Frais</b> : 1 % à l\'achat et 1 % à la vente. Un aller-retour coûte donc au moins 2 %, auxquels s\'ajoute ton propre impact sur le prix.',
+    ],
+  },
+  {
+    title: '🚩 Repérer un rug pull',
+    items: [
+      '<b>Le créateur détient beaucoup de jetons</b> (plus de 5 à 10 %) : il peut tout vendre d\'un coup.',
+      "<b>Bundle</b> : une grosse part de l'offre a été achetée dans le même bloc que le lancement. C'est souvent le créateur avec plusieurs portefeuilles.",
+      '<b>Beaucoup de snipers</b> : des bots ont acheté dans les premières secondes et vendront au premier pump.',
+      '<b>Top 10 très concentré</b> (plus de 40 à 50 %) : quelques baleines contrôlent le prix.',
+      '<b>Aucun réseau social</b>, pas d\'histoire, un nom copié sur un token à la mode : signal d\'un token jetable.',
+      "<b>Montée trop parfaite</b> : des bougies vertes régulières, sans aucune correction, sont souvent artificielles.",
+    ],
+  },
+  {
+    title: '🎯 Stratégies qui marchent (souvent)',
+    items: [
+      '<b>Récupérer sa mise</b> : à x2, vends 50 %. Le reste est un « free ride » : même s\'il va à zéro, tu ne perds rien.',
+      '<b>Sortie échelonnée</b> : vends par paliers (x2, x5, x10) et garde un petit moonbag de 10 % au cas où.',
+      '<b>Petites mises, beaucoup de tentatives</b> : 10 tokens à 1 % plutôt qu\'un seul à 10 %.',
+      '<b>Acheter les replis sains</b> : sur un token qui a une vraie communauté, une baisse de 30 à 50 % avec un volume qui tient peut être une entrée.',
+      '<b>Suivre le volume</b> : entre quand le volume accélère, sors quand il s\'essouffle.',
+      "<b>Stop loss mental</b> : il n'y a pas d'ordre stop ici, à toi de couper à -40 / -50 % sans hésiter.",
+    ],
+  },
+  {
+    title: '🧘 Psychologie du degen',
+    items: [
+      "<b>Le FOMO te ruine</b> : un token qui a déjà fait x20 en 10 minutes a plus de chances de redescendre que de refaire x20.",
+      '<b>Pas de vengeance</b> : après un rug, ne remets pas le double pour te « refaire ». Fais une pause.',
+      "<b>Accepte de rater des pumps</b> : il y a un nouveau token toutes les deux ou trois minutes. Les occasions ne manquent jamais.",
+      "<b>Prendre ses profits n'est jamais une erreur</b>. Personne n'a fait faillite en encaissant un x3.",
+      '<b>Note tes trades</b> dans le Journal : pourquoi tu es entré, où tu es sorti, et ce que tu as appris.',
+    ],
+  },
+];
+
+export const MEME_GLOSSARY = [
+  ['Ape / aper', 'acheter vite et fort, sans trop réfléchir'],
+  ['Bag', 'ta position sur un token'],
+  ['Moonbag', 'la petite partie que tu gardes « au cas où » après avoir pris tes profits'],
+  ['Rug pull', 'le créateur vend tout ou retire la liquidité, le prix tombe à zéro'],
+  ['Dev', 'le créateur du token'],
+  ['Sniper', "bot qui achète dans les toutes premières secondes du lancement"],
+  ['Bundle', "plusieurs achats regroupés au lancement, souvent par le dev avec plusieurs portefeuilles"],
+  ['Bonding curve', 'courbe de prix automatique avant la migration sur le DEX'],
+  ['Migration', 'passage du token sur un DEX une fois la market cap cible atteinte'],
+  ['Roi de la colline', "le token non migré avec la plus grosse market cap du moment"],
+  ['Jeet', 'quelqu\'un qui vend au moindre petit gain'],
+  ['Diamond hands', 'qui garde sa position malgré la volatilité'],
+  ['Paper hands', 'qui vend à la première baisse'],
+  ['FOMO', 'peur de rater le mouvement, qui pousse à acheter trop tard'],
+  ['ATH', 'plus haut historique (« all time high »)'],
+  ['MC', 'market cap, la capitalisation (prix × nombre de jetons)'],
+  ['LP', 'pool de liquidité'],
+  ['Slippage', "écart maximum de prix que tu acceptes pour que ton ordre passe"],
+  ['Dead cat bounce', 'petit rebond après une chute, avant de rechuter'],
+  ['CTO', '« community takeover » : la communauté reprend un token abandonné par le dev'],
+  ['WAGMI / NGMI', '« on va tous y arriver » / « tu ne vas pas y arriver »'],
+  ['Liquidité de sortie', "les acheteurs tardifs à qui les premiers vendent leurs jetons"],
+];

@@ -158,7 +158,7 @@ export default function BottomPanel() {
                 {f(account.trades).slice(-200).reverse().map((t) => (
                   <tr key={t.id}>
                     <td className="muted">{fmtDateTime(t.t)}</td>
-                    <td><b>{t.sym}</b> {t.kind === 'futures' && <span className="tag">x{t.leverage}</span>}</td>
+                    <td><b>{t.sym}</b> {t.kind === 'futures' && <span className="tag">x{t.leverage}</span>}{t.kind === 'meme' && <span className="tag">meme</span>}</td>
                     <td>{tradeType(t)}</td>
                     <td className={t.side === 'buy' ? 'up' : 'down'}>{t.side === 'buy' ? 'Achat' : 'Vente'}</td>
                     <td className="mono">{fmtPrice(t.price)}</td>
@@ -214,6 +214,7 @@ export default function BottomPanel() {
 }
 
 function tradeType(t) {
+  if (t.kind === 'meme') return t.side === 'buy' ? 'Achat meme' : 'Vente meme';
   if (t.kind === 'spot') return { market: 'Marché', limit: 'Limite', stop: 'Stop' }[t.type] || t.type;
   return { open: `Ouverture ${t.posSide}`, manual: `Fermeture ${t.posSide}`, sl: 'Stop loss', tp: 'Take profit', liquidation: 'Liquidation' }[t.type] || t.type;
 }

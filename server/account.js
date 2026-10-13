@@ -1,4 +1,5 @@
 import { COIN_MAP } from './coins.js';
+import { MEME_FEE } from './memes.js';
 
 const TAKER = 0.001;
 const MAKER = 0.0005;
@@ -339,10 +340,58 @@ export class Account {
     this.dirty = true;
   }
 
+  // ---------- Meme coins ----------
+  memeBag() { return this.s.memes || (this.s.memes = {}); }
+
+  memeBuy(id, usd, maxSlip = 15) {
+    const tk = this.mm?.find(id) || fail('Token introuvable');
+    const a = num(usd, 'Montant');
+    if (a > this.s.cash + 1e-9) fail('Solde insuffisant');
+    const q = this.mm.quoteBuy(tk, a);
+    if (q.impact * 100 > Number(maxSlip) + 1e-9) fail(`Impact sur le prix trop élevé (${(q.impact * 100).toFixed(1)} % > ${maxSlip} %). Réduis le montant ou augmente le slippage.`);
+    this.s.cash -= a;
+    this.mm.applyBuy(tk, a * (1 - MEME_FEE));
+    const bag = this.memeBag();
+    const h = bag[tk.id] || (bag[tk.id] = { qty: 0, cost: 0, ticker: tk.ticker, name: tk.name, emoji: tk.emoji });
+    h.qty += q.tokens;
+    h.cost += a;
+    const price = a / q.tokens;
+    this.recordTrade({ kind: 'meme', memeId: tk.id, sym: '$' + tk.ticker, side: 'buy', type: 'market', qty: q.tokens, price, fee: q.fee, pnl: null });
+    this.notify('fill', `Achat de ${fmtQ(q.tokens)} $${tk.ticker} pour ${a.toFixed(2)} $`, { sym: '$' + tk.ticker });
+  }
+
+  memeSell(id, pct = 100, maxSlip = 15) {
+    const bag = this.memeBag();
+    const h = bag[Number(id)] || fail("Tu ne possèdes pas ce token");
+    const tk = this.mm?.find(id) || fail('Token introuvable');
+    const frac = Math.min(1, Math.max(0.01, Number(pct) / 100));
+    const qty = h.qty * frac;
+    const q = this.mm.quoteSell(tk, qty);
+    if (-q.impact * 100 > Number(maxSlip) + 1e-9) fail(`Impact sur le prix trop élevé (${(q.impact * 100).toFixed(1)} %). Vends en plusieurs fois ou augmente le slippage.`);
+    this.mm.applySell(tk, qty);
+    const costPart = h.cost * frac;
+    const pnl = q.usd - costPart;
+    this.s.cash += q.usd;
+    h.qty -= qty;
+    h.cost -= costPart;
+    if (frac >= 0.9999 || h.qty <= 0) delete bag[tk.id];
+    this.recordTrade({ kind: 'meme', memeId: tk.id, sym: '$' + tk.ticker, side: 'sell', type: 'market', qty, price: q.usd / qty, fee: q.fee, pnl, pnlPct: (q.usd / costPart - 1) * 100 });
+    this.notify('fill', `Vente de ${fmtQ(qty)} $${tk.ticker} pour ${q.usd.toFixed(2)} $ (${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} $)`, { sym: '$' + tk.ticker });
+  }
+
+  memeValue() {
+    let v = 0;
+    for (const [id, h] of Object.entries(this.s.memes || {})) {
+      const tk = this.mm?.find(id);
+      if (tk) v += h.qty * this.mm.price(tk);
+    }
+    return v;
+  }
+
   // ---------- Compte ----------
   equity() {
     const s = this.s;
-    let eq = s.cash;
+    let eq = s.cash + this.memeValue();
     for (const [sym, h] of Object.entries(s.holdings)) eq += h.qty * this.price(sym);
     for (const o of s.orders) {
       if (o.reserved) eq += o.reserved;
@@ -408,7 +457,7 @@ export class Account {
   }
 
   snapshot() {
-    return { ...this.s, equityNow: this.equity() };
+    return { ...this.s, equityNow: this.equity(), memeValue: this.memeValue() };
   }
 }
 

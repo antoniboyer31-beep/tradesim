@@ -7,9 +7,10 @@ import Tools from './pages/Tools.jsx';
 import Academy from './pages/Academy.jsx';
 import Community, { fearGreed, fgLabel } from './pages/Community.jsx';
 import Journal from './pages/Journal.jsx';
+import MemeZone from './pages/MemeZone.jsx';
 
 const PAGES = [
-  ['trade', '📊 Trading'], ['portfolio', '💼 Portefeuille'], ['tools', '🧰 Outils'], ['academy', '🎓 Académie'], ['community', '🌍 Marché & communauté'], ['journal', '📓 Journal'],
+  ['trade', '📊 Trading'], ['meme', '🐸 Meme Zone'], ['portfolio', '💼 Portefeuille'], ['tools', '🧰 Outils'], ['academy', '🎓 Académie'], ['community', '🌍 Marché & communauté'], ['journal', '📓 Journal'],
 ];
 
 function Clock() {
@@ -185,6 +186,7 @@ export default function App() {
         {page === 'academy' && <Academy />}
         {page === 'community' && <Community />}
         {page === 'journal' && <Journal />}
+        {page === 'meme' && <MemeZone />}
       </main>
       <MoneyModal />
       <AwayModal />

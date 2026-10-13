@@ -10,6 +10,7 @@ import { COINS } from './coins.js';
 import { chatMessage, randomUser } from './social.js';
 import { createAuth } from './auth.js';
 import { createStore } from './persist.js';
+import { MemeMarket } from './memes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -23,45 +24,71 @@ const market = new Market();
 let account;
 const nowSec = () => Date.now() / 1000;
 
+const memes = new MemeMarket();
+const FILES = ['market.json.gz', 'account.json', 'memes.json.gz'];
+const heldMemes = () => new Set(Object.keys(account?.s.memes || {}).map(Number));
+
 async function boot() {
   const t0 = Date.now();
+  let loaded = false;
   try {
-    const data = await store.load();
-    if (data) {
-      market.load(data.market);
-      account = new Account(market, data.account);
+    const data = await store.load(FILES);
+    if (data['market.json.gz'] && data['account.json']) {
+      market.load(data['market.json.gz']);
+      account = new Account(market, data['account.json']);
       market.onStep = (...a) => account.onStep(...a);
       const gap = nowSec() - market.time;
       console.log(`Reprise de la simulation (${store.kind}) : rattrapage de ${(gap / 60).toFixed(1)} minutes de marché...`);
       market.simulate(nowSec());
       console.log(`Marché à jour en ${Date.now() - t0} ms`);
-      return;
+      loaded = true;
+    }
+    if (loaded && data['memes.json.gz']) {
+      memes.load(data['memes.json.gz']);
+      memes.simulate(nowSec(), heldMemes());
+      console.log(`Meme coins à jour (${memes.tokens.length} tokens)`);
     }
   } catch (e) {
     console.error('Sauvegarde illisible, nouvelle simulation :', e.message);
+    loaded = false;
   }
-  console.log("Génération de 3 ans d'historique de marché (une seule fois)...");
-  account = new Account(market, null);
-  market.initFresh(nowSec());
-  market.onStep = (...a) => account.onStep(...a);
-  console.log(`Historique généré en ${Date.now() - t0} ms`);
-  await save(true);
+  if (!loaded) {
+    console.log("Génération de 3 ans d'historique de marché (une seule fois)...");
+    account = new Account(market, null);
+    market.initFresh(nowSec());
+    market.onStep = (...a) => account.onStep(...a);
+    console.log(`Historique généré en ${Date.now() - t0} ms`);
+  }
+  account.mm = memes;
+  if (!memes.tokens.length) {
+    memes.initFresh(nowSec());
+    console.log(`Meme coins générés (${memes.tokens.length} tokens)`);
+  }
+  if (!loaded) await save(true);
 }
 
 const MARKET_SAVE_MS = store.kind === 'github' ? 30 * 60_000 : 60_000;
+const MEME_SAVE_MS = store.kind === 'github' ? 10 * 60_000 : 60_000;
 let saving = false;
 let lastMarketSave = 0;
+let lastMemeSave = 0;
 let lastAccountJson = '';
 async function save(force = false) {
   if (saving) return;
   const accountJson = JSON.stringify(account.s);
   const withMarket = force || Date.now() - lastMarketSave >= MARKET_SAVE_MS;
-  if (!withMarket && accountJson === lastAccountJson) return;
+  const withMemes = force || Date.now() - lastMemeSave >= MEME_SAVE_MS;
+  if (!withMarket && !withMemes && accountJson === lastAccountJson) return;
   saving = true;
   try {
-    await store.save({ marketChunks: withMarket ? market.serializeChunks() : null, account: accountJson });
+    await store.save({
+      'market.json.gz': withMarket ? market.serializeChunks() : null,
+      'memes.json.gz': withMemes ? memes.serializeChunks() : null,
+      'account.json': accountJson,
+    });
     lastAccountJson = accountJson;
     if (withMarket) lastMarketSave = Date.now();
+    if (withMemes) lastMemeSave = Date.now();
   } catch (e) {
     console.error('Erreur de sauvegarde', e.message);
   } finally {
@@ -133,6 +160,19 @@ app.delete('/api/alerts/:id', wrap((req) => { account.removeAlert(req.params.id)
 app.post('/api/journal', wrap((req) => { account.addJournal(req.body || {}); }));
 app.delete('/api/journal/:id', wrap((req) => { account.removeJournal(req.params.id); }));
 app.post('/api/notifications/clear', wrap(() => { account.clearNotifications(); }));
+app.get('/api/memes', wrap(() => ({ tokens: memes.list(), feed: memes.feed.slice(-60).reverse() })));
+app.get('/api/memes/:id', wrap((req) => {
+  const d = memes.detail(req.params.id);
+  if (!d) throw new UserError('Token introuvable');
+  return { token: d };
+}));
+app.get('/api/memes/:id/candles', wrap((req) => {
+  const c = memes.candles(req.params.id, req.query.tf);
+  if (!c) throw new UserError('Paramètres invalides');
+  return { candles: c };
+}));
+app.post('/api/memes/:id/buy', wrap((req) => { account.memeBuy(req.params.id, req.body?.usd, req.body?.slippage ?? 15); }));
+app.post('/api/memes/:id/sell', wrap((req) => { account.memeSell(req.params.id, req.body?.pct ?? 100, req.body?.slippage ?? 15); }));
 app.post('/api/chat', wrap((req) => {
   const text = String(req.body?.text || '').trim().slice(0, 280);
   if (!text) throw new UserError('Message vide');
@@ -171,6 +211,11 @@ wss.on('connection', (ws) => {
         send(ws, { type: 'trades', sym: msg.sym, trades: trades.slice(-30), reset: true });
         if (trades.length) ws.lastTradeT = trades[trades.length - 1].t;
         send(ws, { type: 'book', ...market.orderBook(msg.sym) });
+      }
+      if (msg.type === 'memeOn') ws.memeOn = !!msg.on;
+      if (msg.type === 'memeSub') {
+        ws.meme = msg.id ? { id: Number(msg.id), tf: msg.tf || '5s' } : null;
+        ws.memeTradeT = 0;
       }
     } catch { /* message ignoré */ }
   });
@@ -217,6 +262,33 @@ setInterval(() => {
   if (tickCount % 20 === 0) broadcast({ type: 'online', online: onlineCount() });
   if (Math.random() < TICK_MS / 4500) pushChat({ t: Date.now(), user: randomUser(), text: chatMessage(tickers) });
 }, TICK_MS);
+
+memes.onEvent = (ev) => {
+  if (Math.abs(nowSec() - ev.t) < 10) broadcast({ type: 'memeEvent', event: ev });
+  const h = account.s.memes?.[ev.id];
+  if (h && (ev.kind === 'rug' || ev.kind === 'devsell' || ev.kind === 'graduate')) account.notify(ev.kind === 'graduate' ? 'tp' : 'liquidation', ev.text, { sym: '$' + h.ticker });
+};
+let memeLast = nowSec();
+let memeCount = 0;
+setInterval(() => {
+  const t = nowSec();
+  if (t - memeLast > 10) memes.simulate(t, heldMemes());
+  else memes.step(t - memeLast, t, true);
+  memeLast = t;
+  if (++memeCount % 300 === 0) memes.cleanup(t, heldMemes());
+  let listMsg = null;
+  for (const ws of wss.clients) {
+    if (ws.readyState !== 1 || !ws.memeOn) continue;
+    if (memeCount % 2 === 0) send(ws, { type: 'memes', tokens: (listMsg ||= memes.list()) });
+    if (!ws.meme) continue;
+    const tk = memes.find(ws.meme.id);
+    if (!tk) continue;
+    const c = memes.candles(tk.id, ws.meme.tf);
+    const trades = (memes.trades[tk.id] || []).filter((x) => x.t > ws.memeTradeT);
+    if (trades.length) ws.memeTradeT = trades[trades.length - 1].t;
+    send(ws, { type: 'memeTick', id: tk.id, tf: ws.meme.tf, candle: c[c.length - 1], stats: memes.stats(tk), trades });
+  }
+}, 1000);
 
 setInterval(() => save(), 60_000);
 let stopping = false;

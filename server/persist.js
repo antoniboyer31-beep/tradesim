@@ -15,26 +15,31 @@ function gzipChunks(chunks) {
   });
 }
 
+const isMarket = (name) => name.endsWith('.gz');
+
 function localStore(dataDir) {
-  const marketFile = path.join(dataDir, 'market.json.gz');
-  const accountFile = path.join(dataDir, 'account.json');
   const legacyFile = path.join(dataDir, 'state.json');
   const writeAtomic = (file, data) => { fs.writeFileSync(file + '.tmp', data); fs.renameSync(file + '.tmp', file); };
   return {
     kind: 'local',
-    async load() {
-      if (fs.existsSync(marketFile) && fs.existsSync(accountFile)) {
-        return { market: JSON.parse(zlib.gunzipSync(fs.readFileSync(marketFile)).toString('utf8')), account: JSON.parse(fs.readFileSync(accountFile, 'utf8')) };
+    async load(names) {
+      const out = {};
+      for (const n of names) {
+        const f = path.join(dataDir, n);
+        if (fs.existsSync(f)) out[n] = JSON.parse(isMarket(n) ? zlib.gunzipSync(fs.readFileSync(f)).toString('utf8') : fs.readFileSync(f, 'utf8'));
       }
-      if (fs.existsSync(legacyFile)) {
+      if (!out['market.json.gz'] && fs.existsSync(legacyFile)) {
         const data = JSON.parse(fs.readFileSync(legacyFile, 'utf8'));
-        return { market: data.market, account: data.account };
+        out['market.json.gz'] = data.market;
+        out['account.json'] = data.account;
       }
-      return null;
+      return out;
     },
-    async save({ marketChunks, account }) {
-      if (marketChunks) writeAtomic(marketFile, await gzipChunks(marketChunks));
-      writeAtomic(accountFile, account);
+    async save(files) {
+      for (const [n, v] of Object.entries(files)) {
+        if (v == null) continue;
+        writeAtomic(path.join(dataDir, n), isMarket(n) ? await gzipChunks(v) : v);
+      }
       if (fs.existsSync(legacyFile)) fs.rmSync(legacyFile);
     },
   };
@@ -53,36 +58,33 @@ function githubStore({ token, repo, branch }) {
     if (!res.ok) throw new Error(`GitHub ${res.status} ${p}: ${(await res.text()).slice(0, 200)}`);
     return res.json();
   };
-  const blob = async (sha) => {
-    const b = await gh(`/git/blobs/${sha}`);
-    return Buffer.from(b.content, 'base64');
-  };
-  let marketSha = null;
+  const blob = async (sha) => Buffer.from((await gh(`/git/blobs/${sha}`)).content, 'base64');
+  const shas = {};
   let refExists = false;
   return {
     kind: 'github',
-    async load() {
+    async load(names) {
+      const out = {};
       const ref = await gh(`/git/ref/heads/${branch}`);
-      if (!ref) return null;
+      if (!ref) return out;
       refExists = true;
       const commit = await gh(`/git/commits/${ref.object.sha}`);
       const tree = await gh(`/git/trees/${commit.tree.sha}`);
-      const m = tree.tree.find((f) => f.path === 'market.json.gz');
-      const a = tree.tree.find((f) => f.path === 'account.json');
-      if (!m || !a) return null;
-      marketSha = m.sha;
-      return { market: JSON.parse(zlib.gunzipSync(await blob(m.sha)).toString('utf8')), account: JSON.parse((await blob(a.sha)).toString('utf8')) };
-    },
-    async save({ marketChunks, account }) {
-      if (marketChunks || !marketSha) {
-        const gz = await gzipChunks(marketChunks);
-        marketSha = (await gh('/git/blobs', { method: 'POST', body: JSON.stringify({ content: gz.toString('base64'), encoding: 'base64' }) })).sha;
+      for (const f of tree.tree) {
+        shas[f.path] = f.sha;
+        if (!names.includes(f.path)) continue;
+        const buf = await blob(f.sha);
+        out[f.path] = JSON.parse(isMarket(f.path) ? zlib.gunzipSync(buf).toString('utf8') : buf.toString('utf8'));
       }
-      const accSha = (await gh('/git/blobs', { method: 'POST', body: JSON.stringify({ content: account, encoding: 'utf-8' }) })).sha;
-      const tree = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ tree: [
-        { path: 'market.json.gz', mode: '100644', type: 'blob', sha: marketSha },
-        { path: 'account.json', mode: '100644', type: 'blob', sha: accSha },
-      ] }) });
+      return out;
+    },
+    async save(files) {
+      for (const [n, v] of Object.entries(files)) {
+        if (v == null) continue;
+        const body = isMarket(n) ? { content: (await gzipChunks(v)).toString('base64'), encoding: 'base64' } : { content: v, encoding: 'utf-8' };
+        shas[n] = (await gh('/git/blobs', { method: 'POST', body: JSON.stringify(body) })).sha;
+      }
+      const tree = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ tree: Object.entries(shas).map(([p, sha]) => ({ path: p, mode: '100644', type: 'blob', sha })) }) });
       const commit = await gh('/git/commits', { method: 'POST', body: JSON.stringify({ message: `Sauvegarde ${new Date().toISOString()}`, tree: tree.sha, parents: [] }) });
       if (refExists) await gh(`/git/refs/heads/${branch}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha, force: true }) });
       else { await gh('/git/refs', { method: 'POST', body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }) }); refExists = true; }

@@ -63,7 +63,8 @@ export default function Portfolio() {
   let futValue = 0, futPnl = 0;
   for (const p of account.positions) { const { pnl } = positionPnl(p, price(p.sym)); futValue += Math.max(0, p.margin + pnl); futPnl += pnl; }
   const reserved = account.orders.reduce((s, o) => s + (o.reserved || 0) + (o.kind === 'spot' && o.side === 'sell' ? o.qty * price(o.sym) : 0), 0);
-  const equity = account.cash + spotValue + futValue + reserved;
+  const memeValue = account.memeValue || 0;
+  const equity = account.cash + spotValue + futValue + reserved + memeValue;
   const netDeposits = account.deposits - account.withdrawals;
   const totalPnl = equity - netDeposits;
 
@@ -72,6 +73,7 @@ export default function Portfolio() {
     ...holdings.map(([s, h]) => ({ label: s, value: h.qty * price(s), color: coinMap[s]?.color || '#888' })),
     { label: 'Positions à levier', value: futValue, color: '#c77dff' },
     { label: 'Réservé (ordres)', value: reserved, color: '#5c677d' },
+    { label: '🐸 Meme coins', value: memeValue, color: '#f7931a' },
   ].filter((p) => p.value > 0.005);
 
   return (

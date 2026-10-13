@@ -18,6 +18,9 @@ let state = {
   pickedPrice: null,
   page: 'trade',
   moneyOpen: false,
+  memes: [],
+  memeFeed: [],
+  memeOn: false,
 };
 
 const listeners = new Set();
@@ -32,6 +35,23 @@ function subscribe(l) {
 }
 export function useStore(selector) {
   return useSyncExternalStore(subscribe, () => selector(state));
+}
+
+const memeListeners = new Set();
+export function onMemeTick(fn) {
+  memeListeners.add(fn);
+  return () => memeListeners.delete(fn);
+}
+let memeSub = null;
+const wsSend = (m) => { if (ws?.readyState === 1) ws.send(JSON.stringify(m)); };
+export function setMemeMode(on) {
+  setState({ memeOn: on });
+  wsSend({ type: 'memeOn', on });
+  if (!on) subscribeMeme(null);
+}
+export function subscribeMeme(id, tf) {
+  memeSub = id ? { id, tf } : null;
+  wsSend({ type: 'memeSub', id, tf });
 }
 
 const candleListeners = new Set();
@@ -49,6 +69,8 @@ export function connect() {
     retry = 0;
     setState({ connected: true });
     subscribeMarket(state.sym, state.tf);
+    if (state.memeOn) wsSend({ type: 'memeOn', on: true });
+    if (memeSub) wsSend({ type: 'memeSub', ...memeSub });
   };
   ws.onclose = () => {
     setState({ connected: false });
@@ -88,6 +110,15 @@ export function connect() {
         break;
       case 'event':
         handleEvent(msg.event);
+        break;
+      case 'memes':
+        setState({ memes: msg.tokens });
+        break;
+      case 'memeTick':
+        memeListeners.forEach((fn) => fn(msg));
+        break;
+      case 'memeEvent':
+        setState((s) => ({ memeFeed: [msg.event, ...s.memeFeed].slice(0, 80) }));
         break;
     }
   };
