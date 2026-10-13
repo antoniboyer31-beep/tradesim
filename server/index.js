@@ -9,63 +9,67 @@ import { Account, UserError } from './account.js';
 import { COINS } from './coins.js';
 import { chatMessage, randomUser } from './social.js';
 import { createAuth } from './auth.js';
+import { createStore } from './persist.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
-const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '127.0.0.1';
-const TICK_MS = 250;
+const TICK_MS = Number(process.env.TICK_MS || 250);
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
-
+const store = createStore({ dataDir: DATA_DIR });
 const market = new Market();
 let account;
 const nowSec = () => Date.now() / 1000;
 
-function boot() {
+async function boot() {
   const t0 = Date.now();
-  if (fs.existsSync(STATE_FILE)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+  try {
+    const data = await store.load();
+    if (data) {
       market.load(data.market);
       account = new Account(market, data.account);
       market.onStep = (...a) => account.onStep(...a);
       const gap = nowSec() - market.time;
-      console.log(`Reprise de la simulation : rattrapage de ${(gap / 60).toFixed(1)} minutes de marché...`);
+      console.log(`Reprise de la simulation (${store.kind}) : rattrapage de ${(gap / 60).toFixed(1)} minutes de marché...`);
       market.simulate(nowSec());
       console.log(`Marché à jour en ${Date.now() - t0} ms`);
       return;
-    } catch (e) {
-      console.error('Sauvegarde illisible, nouvelle simulation :', e.message);
     }
+  } catch (e) {
+    console.error('Sauvegarde illisible, nouvelle simulation :', e.message);
   }
   console.log("Génération de 3 ans d'historique de marché (une seule fois)...");
   account = new Account(market, null);
   market.initFresh(nowSec());
   market.onStep = (...a) => account.onStep(...a);
   console.log(`Historique généré en ${Date.now() - t0} ms`);
-  save();
+  await save(true);
 }
 
+const MARKET_SAVE_MS = store.kind === 'github' ? 30 * 60_000 : 60_000;
 let saving = false;
-function save() {
+let lastMarketSave = 0;
+let lastAccountJson = '';
+async function save(force = false) {
   if (saving) return;
+  const accountJson = JSON.stringify(account.s);
+  const withMarket = force || Date.now() - lastMarketSave >= MARKET_SAVE_MS;
+  if (!withMarket && accountJson === lastAccountJson) return;
   saving = true;
   try {
-    const json = JSON.stringify({ savedAt: Date.now(), market: market.serialize(), account: account.s });
-    const tmp = STATE_FILE + '.tmp';
-    fs.writeFileSync(tmp, json);
-    fs.renameSync(tmp, STATE_FILE);
+    await store.save({ marketChunks: withMarket ? market.serializeChunks() : null, account: accountJson });
+    lastAccountJson = accountJson;
+    if (withMarket) lastMarketSave = Date.now();
   } catch (e) {
-    console.error('Erreur de sauvegarde', e);
+    console.error('Erreur de sauvegarde', e.message);
   } finally {
     saving = false;
   }
 }
 
-boot();
+await boot();
 
 // ---------- Communauté simulée ----------
 const chat = [];
@@ -87,6 +91,7 @@ app.set('trust proxy', 'loopback');
 app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+app.get('/healthz', (_req, res) => res.send('ok'));
 const auth = createAuth(process.env.APP_PASSWORD);
 app.use(auth.middleware);
 
@@ -213,13 +218,21 @@ setInterval(() => {
   if (Math.random() < TICK_MS / 4500) pushChat({ t: Date.now(), user: randomUser(), text: chatMessage(tickers) });
 }, TICK_MS);
 
-setInterval(save, 60_000);
+setInterval(() => save(), 60_000);
+let stopping = false;
 for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
+  process.on(sig, async () => {
+    if (stopping) return;
+    stopping = true;
     console.log('\nSauvegarde du marché avant arrêt...');
-    save();
+    await save(true);
     process.exit(0);
   });
+}
+
+// L'offre gratuite de Render endort le service après 15 min sans requête entrante.
+if (process.env.RENDER_EXTERNAL_URL) {
+  setInterval(() => fetch(process.env.RENDER_EXTERNAL_URL + '/healthz').catch(() => {}), 10 * 60_000);
 }
 
 server.listen(PORT, HOST, () => {

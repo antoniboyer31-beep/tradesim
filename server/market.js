@@ -162,14 +162,16 @@ export class Market {
     }
   }
 
-  serialize() {
-    const coins = {};
+  *serializeChunks() {
+    const pack = (arr, d) => arr.map((c) => [c[0], +c[1].toPrecision(d), +c[2].toPrecision(d), +c[3].toPrecision(d), +c[4].toPrecision(d), +c[5].toPrecision(3)]);
+    yield `{"time":${this.time},"market":${JSON.stringify(this.market)},"news":${JSON.stringify(this.news.slice(-200))},"nextNewsId":${this.nextNewsId},"coins":{`;
+    let first = true;
     for (const [sym, cs] of Object.entries(this.coins)) {
       const { s1, m1, h1, ...rest } = cs;
-      const pack = (arr, d) => arr.map((c) => [c[0], +c[1].toPrecision(d), +c[2].toPrecision(d), +c[3].toPrecision(d), +c[4].toPrecision(d), +c[5].toPrecision(3)]);
-      coins[sym] = { ...rest, m1: pack(m1, 7), h1: pack(h1, 6) };
+      yield (first ? '' : ',') + JSON.stringify(sym) + ':' + JSON.stringify({ ...rest, m1: pack(m1, 7), h1: pack(h1, 6) });
+      first = false;
     }
-    return { time: this.time, market: this.market, news: this.news.slice(-200), nextNewsId: this.nextNewsId, coins };
+    yield '}}';
   }
 
   // Avance la simulation jusqu'à `to` avec un pas adapté à l'ancienneté :
