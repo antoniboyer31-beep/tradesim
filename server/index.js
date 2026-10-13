@@ -1,0 +1,221 @@
+import express from 'express';
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
+import { Market, TIMEFRAMES } from './market.js';
+import { Account, UserError } from './account.js';
+import { COINS } from './coins.js';
+import { chatMessage, randomUser } from './social.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
+const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || '127.0.0.1';
+const TICK_MS = 250;
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const market = new Market();
+let account;
+const nowSec = () => Date.now() / 1000;
+
+function boot() {
+  const t0 = Date.now();
+  if (fs.existsSync(STATE_FILE)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      market.load(data.market);
+      account = new Account(market, data.account);
+      market.onStep = (...a) => account.onStep(...a);
+      const gap = nowSec() - market.time;
+      console.log(`Reprise de la simulation : rattrapage de ${(gap / 60).toFixed(1)} minutes de marché...`);
+      market.simulate(nowSec());
+      console.log(`Marché à jour en ${Date.now() - t0} ms`);
+      return;
+    } catch (e) {
+      console.error('Sauvegarde illisible, nouvelle simulation :', e.message);
+    }
+  }
+  console.log("Génération de 3 ans d'historique de marché (une seule fois)...");
+  account = new Account(market, null);
+  market.initFresh(nowSec());
+  market.onStep = (...a) => account.onStep(...a);
+  console.log(`Historique généré en ${Date.now() - t0} ms`);
+  save();
+}
+
+let saving = false;
+function save() {
+  if (saving) return;
+  saving = true;
+  try {
+    const json = JSON.stringify({ savedAt: Date.now(), market: market.serialize(), account: account.s });
+    const tmp = STATE_FILE + '.tmp';
+    fs.writeFileSync(tmp, json);
+    fs.renameSync(tmp, STATE_FILE);
+  } catch (e) {
+    console.error('Erreur de sauvegarde', e);
+  } finally {
+    saving = false;
+  }
+}
+
+boot();
+
+// ---------- Communauté simulée ----------
+const chat = [];
+function pushChat(msg) {
+  chat.push(msg);
+  if (chat.length > 120) chat.splice(0, chat.length - 100);
+  broadcast({ type: 'chat', msg });
+}
+function onlineCount() {
+  const h = new Date().getHours();
+  const base = 1800 + 900 * Math.sin(((h - 8) / 24) * 2 * Math.PI);
+  return Math.round(base + Math.sin(Date.now() / 60000) * 120 + Math.random() * 40);
+}
+for (let i = 0; i < 25; i++) chat.push({ t: Date.now() - (25 - i) * 20000, user: randomUser(), text: chatMessage(market.tickers()) });
+
+// ---------- HTTP ----------
+const app = express();
+app.use(express.json({ limit: '100kb' }));
+
+const wrap = (fn) => (req, res) => {
+  try {
+    const out = fn(req, res);
+    res.json(out ?? { ok: true, account: account.snapshot() });
+  } catch (e) {
+    if (e instanceof UserError) res.status(400).json({ error: e.message });
+    else { console.error(e); res.status(500).json({ error: 'Erreur interne' }); }
+  }
+};
+
+app.get('/api/coins', wrap(() => ({ coins: COINS, tickers: market.tickers(), timeframes: Object.keys(TIMEFRAMES) })));
+app.get('/api/candles', wrap((req) => {
+  const { sym, tf } = req.query;
+  const limit = Math.min(5000, Math.max(10, Number(req.query.limit) || 1500));
+  const candles = market.candles(sym, tf, limit);
+  if (!candles) throw new UserError('Paramètres invalides');
+  return { sym, tf, candles };
+}));
+app.get('/api/sparks', wrap(() => Object.fromEntries(Object.entries(market.stats).map(([k, v]) => [k, v.spark]))));
+app.get('/api/account', wrap(() => ({ account: account.snapshot() })));
+app.get('/api/news', wrap(() => ({ news: market.news.slice(-100).reverse() })));
+app.get('/api/chat', wrap(() => ({ chat })));
+
+app.post('/api/spot', wrap((req) => { account.placeSpot(req.body); }));
+app.post('/api/futures', wrap((req) => { account.placeFutures(req.body); }));
+app.delete('/api/orders/:id', wrap((req) => { account.cancelOrder(req.params.id); }));
+app.post('/api/positions/:id/close', wrap((req) => { account.closePosition(req.params.id, req.body?.pct ?? 100); }));
+app.patch('/api/positions/:id', wrap((req) => { account.updatePosition(req.params.id, req.body || {}); }));
+app.post('/api/positions/:id/margin', wrap((req) => { account.addMargin(req.params.id, req.body?.amount); }));
+app.post('/api/positions/close-all', wrap(() => { for (const p of [...account.s.positions]) account.closePosition(p.id); }));
+app.post('/api/account/deposit', wrap((req) => { account.deposit(req.body?.amount); }));
+app.post('/api/account/withdraw', wrap((req) => { account.withdraw(req.body?.amount); }));
+app.post('/api/account/reset', wrap((req) => { account.reset(req.body?.balance ?? 10000); }));
+app.post('/api/alerts', wrap((req) => { account.addAlert(req.body || {}); }));
+app.delete('/api/alerts/:id', wrap((req) => { account.removeAlert(req.params.id); }));
+app.post('/api/journal', wrap((req) => { account.addJournal(req.body || {}); }));
+app.delete('/api/journal/:id', wrap((req) => { account.removeJournal(req.params.id); }));
+app.post('/api/notifications/clear', wrap(() => { account.clearNotifications(); }));
+app.post('/api/chat', wrap((req) => {
+  const text = String(req.body?.text || '').trim().slice(0, 280);
+  if (!text) throw new UserError('Message vide');
+  pushChat({ t: Date.now(), user: 'vous', text, me: true });
+  return { ok: true };
+}));
+
+const dist = path.join(ROOT, 'dist');
+if (fs.existsSync(dist)) {
+  app.use(express.static(dist));
+  app.get(/^\/(?!api|ws).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+}
+
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws' });
+
+function send(ws, msg) {
+  if (ws.readyState === 1) ws.send(JSON.stringify(msg));
+}
+function broadcast(msg) {
+  const data = JSON.stringify(msg);
+  for (const ws of wss.clients) if (ws.readyState === 1) ws.send(data);
+}
+
+wss.on('connection', (ws) => {
+  ws.sub = { sym: 'NOVA', tf: '1m' };
+  ws.lastTradeT = 0;
+  send(ws, { type: 'hello', tickers: market.tickers(), account: account.snapshot(), online: onlineCount() });
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg.type === 'sub' && market.coins[msg.sym] && TIMEFRAMES[msg.tf]) {
+        ws.sub = { sym: msg.sym, tf: msg.tf };
+        ws.lastTradeT = 0;
+        const trades = market.trades[msg.sym] || [];
+        send(ws, { type: 'trades', sym: msg.sym, trades: trades.slice(-30), reset: true });
+        if (trades.length) ws.lastTradeT = trades[trades.length - 1].t;
+        send(ws, { type: 'book', ...market.orderBook(msg.sym) });
+      }
+    } catch { /* message ignoré */ }
+  });
+});
+
+account.onEvent = (ev) => broadcast({ type: 'event', event: ev });
+market.onNews = (item) => {
+  if (Math.abs(nowSec() - item.t) < 10) broadcast({ type: 'news', item });
+};
+
+let tickCount = 0;
+let lastT = nowSec();
+setInterval(() => {
+  const t = nowSec();
+  const dt = t - lastT;
+  if (dt > 5) market.simulate(t);
+  else if (dt > 0) market.step(dt, t, true);
+  lastT = t;
+  tickCount++;
+
+  if (tickCount % 4 === 0) market.computeStats();
+  if (tickCount % 240 === 0) market.trim(t);
+
+  const tickers = market.tickers();
+  const tickMsg = JSON.stringify({ type: 'tick', t: Date.now(), tickers });
+  const book = tickCount % 2 === 0;
+  for (const ws of wss.clients) {
+    if (ws.readyState !== 1) continue;
+    ws.send(tickMsg);
+    const { sym, tf } = ws.sub;
+    send(ws, { type: 'candle', sym, tf, candle: market.lastCandle(sym, tf) });
+    const trades = market.trades[sym] || [];
+    const fresh = trades.filter((x) => x.t > ws.lastTradeT);
+    if (fresh.length) {
+      ws.lastTradeT = fresh[fresh.length - 1].t;
+      send(ws, { type: 'trades', sym, trades: fresh });
+    }
+    if (book) send(ws, { type: 'book', ...market.orderBook(sym) });
+  }
+  if (account.dirty || tickCount % 8 === 0) {
+    account.dirty = false;
+    broadcast({ type: 'account', account: account.snapshot() });
+  }
+  if (tickCount % 20 === 0) broadcast({ type: 'online', online: onlineCount() });
+  if (Math.random() < TICK_MS / 4500) pushChat({ t: Date.now(), user: randomUser(), text: chatMessage(tickers) });
+}, TICK_MS);
+
+setInterval(save, 60_000);
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    console.log('\nSauvegarde du marché avant arrêt...');
+    save();
+    process.exit(0);
+  });
+}
+
+server.listen(PORT, HOST, () => {
+  console.log(`\n  TradeSim est lancé : http://localhost:${PORT}\n`);
+});
