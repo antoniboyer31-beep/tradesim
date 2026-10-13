@@ -8,6 +8,7 @@ import { Market, TIMEFRAMES } from './market.js';
 import { Account, UserError } from './account.js';
 import { COINS } from './coins.js';
 import { chatMessage, randomUser } from './social.js';
+import { createAuth } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -82,7 +83,12 @@ for (let i = 0; i < 25; i++) chat.push({ t: Date.now() - (25 - i) * 20000, user:
 
 // ---------- HTTP ----------
 const app = express();
+app.set('trust proxy', 'loopback');
+app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+const auth = createAuth(process.env.APP_PASSWORD);
+app.use(auth.middleware);
 
 const wrap = (fn) => (req, res) => {
   try {
@@ -136,7 +142,7 @@ if (fs.existsSync(dist)) {
 }
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({ server, path: '/ws', verifyClient: ({ req }) => auth.checkUpgrade(req) });
 
 function send(ws, msg) {
   if (ws.readyState === 1) ws.send(JSON.stringify(msg));
@@ -217,5 +223,5 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`\n  TradeSim est lancé : http://localhost:${PORT}\n`);
+  console.log(`\n  TradeSim est lancé : http://localhost:${PORT}${auth.enabled ? ' (protégé par mot de passe)' : ''}\n`);
 });

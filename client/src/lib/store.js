@@ -124,6 +124,10 @@ export function toast(type, message) {
 
 export async function api(method, url, body) {
   const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+  if (res.status === 401) {
+    location.href = '/login';
+    throw new Error('Non connecté');
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     toast('error', data.error || 'Erreur');
