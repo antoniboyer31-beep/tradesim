@@ -584,3 +584,18 @@ textarea { resize: vertical; }
   .gloss { grid-template-columns: 1fr; }
   .meme-head-mc { margin-left: 0; align-items: flex-start; }
 }
+.held-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; background: rgba(79,140,255,.12); border-radius: 6px; padding: 3px 7px; }
+.meme-card.held { border-color: var(--accent); background: linear-gradient(90deg, rgba(79,140,255,.14), var(--panel2) 60%); }
+.tag-held { font-size: 10px; background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: 700; }
+.chk.mine { color: var(--accent); font-weight: 600; }
+.bags-strip { display: flex; gap: 14px; align-items: center; padding: 10px 12px; border-color: rgba(79,140,255,.45); background: linear-gradient(90deg, rgba(79,140,255,.12), var(--panel)); }
+.bags-sum { display: flex; flex-direction: column; flex-shrink: 0; }
+.bags-sum b { font-size: 15px; }
+.bags-items { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.bag-chip { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px solid var(--border2); border-radius: 9px; padding: 5px 10px 5px 5px; white-space: nowrap; }
+.bag-chip:hover, .bag-chip.on { border-color: var(--accent); }
+.bag-chip.rugged { opacity: .6; }
+.bag-txt { display: flex; flex-direction: column; text-align: left; }
+.pos-banner { display: flex; flex-direction: column; background: rgba(79,140,255,.12); border: 1px solid rgba(79,140,255,.45); border-radius: 9px; padding: 6px 12px; margin-left: auto; }
+.pos-banner + .meme-head-mc { margin-left: 0; }
+@media (max-width: 760px) { .bags-strip { flex-direction: column; align-items: stretch; } .pos-banner { margin-left: 0; } }

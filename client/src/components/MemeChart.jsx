@@ -59,7 +59,7 @@ export default function MemeChart({ id, tf, mode }) {
       position: t.side === 'buy' ? 'belowBar' : 'aboveBar',
       color: t.side === 'buy' ? UP : DOWN,
       shape: t.side === 'buy' ? 'arrowUp' : 'arrowDown',
-      text: t.side === 'buy' ? 'Achat' : 'Vente',
+      text: `${t.side === 'buy' ? 'Achat' : 'Vente'} ${Math.round(t.qty * t.price)} $`,
     })).sort((a, b) => a.time - b.time));
     r.current.lines.forEach((l) => main.removePriceLine(l));
     r.current.lines = [];

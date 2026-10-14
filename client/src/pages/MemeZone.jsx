@@ -65,12 +65,13 @@ function Progress({ t }) {
 
 function TokenCard({ t, onOpen, quick, held }) {
   const r = riskOf(t);
+  const val = held ? held.qty * t.price : 0;
   const buy = (e) => { e.stopPropagation(); api('POST', `/api/memes/${t.id}/buy`, { usd: quick, slippage: 25 }).catch(() => {}); };
   return (
     <div className={cls('meme-card', t.rugged && 'rugged', held && 'held')} onClick={() => onOpen(t.id)}>
       <div className="meme-av">{t.emoji}</div>
       <div className="meme-info">
-        <div className="meme-row1"><b>{t.name}</b> <span className="muted">${t.ticker}</span> {held && <span className="tag-held">bag</span>}</div>
+        <div className="meme-row1"><b>{t.name}</b> <span className="muted">${t.ticker}</span> {held && <span className="tag-held">💼 MON BAG</span>}</div>
         <div className="meme-row2 small">
           <span className="muted">{age(t.createdAt)}</span>
           <span>MC <b className="mono">{fmtCompact(t.mcap)} $</b></span>
@@ -83,6 +84,12 @@ function TokenCard({ t, onOpen, quick, held }) {
           <span className={cls('risk-pill', riskCls(r.score))} title="Score de risque (rug check)">{r.label}</span>
           <span className="small muted">Vol 1h {fmtCompact(t.vol1h)} $</span>
         </div>
+        {held && (
+          <div className="held-row small">
+            💼 Placé <b className="mono">{fmtUsd(held.cost)}</b> → <b className="mono">{fmtUsd(val)}</b>
+            <b className={cls('mono', pnlClass(val - held.cost))}>{fmtSigned(val - held.cost)} ({held.cost ? fmtPct((val / held.cost - 1) * 100, 0) : '—'})</b>
+          </div>
+        )}
       </div>
       {!t.rugged && <button className="quick-buy" onClick={buy} title={`Achat express de ${quick} $`}>⚡ {quick} $</button>}
     </div>
@@ -94,10 +101,12 @@ function Board({ tokens, onOpen, held }) {
   const [q, setQ] = useState('');
   const [hideRisk, setHideRisk] = useState(false);
   const [hideDead, setHideDead] = useState(true);
+  const [mine, setMine] = useState(false);
   const [tip, setTip] = useState(() => Math.floor(Math.random() * MEME_TIPS.length));
   const feed = useStore((s) => s.memeFeed);
   useEffect(() => { const i = setInterval(() => setTip((x) => (x + 1) % MEME_TIPS.length), 20000); return () => clearInterval(i); }, []);
   const filt = tokens.filter((t) => {
+    if (mine && !held.has(t.id)) return false;
     if (q && !(t.name + t.ticker).toLowerCase().includes(q.toLowerCase())) return false;
     if (hideRisk && riskOf(t).score >= 50) return false;
     if (hideDead && (t.rugged || (t.vol5m < 20 && Date.now() - t.createdAt > 3600_000))) return held.has(t.id);
@@ -111,7 +120,7 @@ function Board({ tokens, onOpen, held }) {
   const col = (title, hint, list) => (
     <div className="meme-col panel">
       <div className="panel-title"><span>{title} <span className="muted small">({list.length})</span></span><span className="small muted">{hint}</span></div>
-      <div className="meme-list">{list.length ? list.map((t) => <TokenCard key={t.id} t={t} onOpen={onOpen} quick={quick} held={held.has(t.id)} />) : <p className="muted small pad">Rien pour l'instant…</p>}</div>
+      <div className="meme-list">{list.length ? list.map((t) => <TokenCard key={t.id} t={t} onOpen={onOpen} quick={quick} held={held.get(t.id)} />) : <p className="muted small pad">Rien pour l'instant…</p>}</div>
     </div>
   );
   return (
@@ -119,6 +128,7 @@ function Board({ tokens, onOpen, held }) {
       <div className="meme-tip panel pad"><b>💡 Astuce degen :</b> {MEME_TIPS[tip]}</div>
       <div className="meme-toolbar">
         <input placeholder="🔍 Chercher un token ou un ticker" value={q} onChange={(e) => setQ(e.target.value)} />
+        <label className="chk mine"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> 💼 Seulement mes tokens</label>
         <label className="chk"><input type="checkbox" checked={hideRisk} onChange={(e) => setHideRisk(e.target.checked)} /> Cacher les tokens à risque élevé</label>
         <label className="chk"><input type="checkbox" checked={hideDead} onChange={(e) => setHideDead(e.target.checked)} /> Cacher les tokens morts / rug</label>
         <span className="muted small">Achat express :</span>
@@ -243,6 +253,13 @@ function TokenView({ id, onBack }) {
           <div className="small muted">Créé par {d.creator} · il y a {age(d.createdAt)} · <Socials s={d.socials} /></div>
           <div className="small">« {d.story} »</div>
         </div>
+        {holding && (
+          <div className="pos-banner">
+            <small>💼 Tu as placé de l'argent ici</small>
+            <b className="mono">{fmtUsd(holding.cost)} → {fmtUsd(holding.qty * d.price)}</b>
+            <small className={pnlClass(holding.qty * d.price - holding.cost)}>{fmtSigned(holding.qty * d.price - holding.cost)} · x{(holding.qty * d.price / holding.cost).toFixed(2)} · entrée à {fmtCompact((holding.cost / holding.qty) * SUPPLY)} $ de MC</small>
+          </div>
+        )}
         <div className="meme-head-mc">
           <small className="muted">Market cap</small>
           <b className="mono">{fmtCompact(d.mcap)} $</b>
@@ -478,6 +495,40 @@ function Guide() {
   );
 }
 
+function MyBagsStrip({ tokens, onOpen, current }) {
+  const account = useStore((s) => s.account);
+  const map = Object.fromEntries(tokens.map((t) => [t.id, t]));
+  const bags = Object.entries(account?.memes || {}).map(([id, h]) => {
+    const t = map[id];
+    const v = t ? h.qty * t.price : 0;
+    return { id: Number(id), h, t, v };
+  });
+  if (!bags.length) return null;
+  const cost = bags.reduce((a, b) => a + b.h.cost, 0);
+  const value = bags.reduce((a, b) => a + b.v, 0);
+  return (
+    <div className="bags-strip panel">
+      <div className="bags-sum">
+        <small className="muted">💼 Mes placements meme</small>
+        <b className="mono">{fmtUsd(cost)} → {fmtUsd(value)}</b>
+        <small className={pnlClass(value - cost)}>{fmtSigned(value - cost)} ({cost ? fmtPct((value / cost - 1) * 100, 1) : '—'})</small>
+      </div>
+      <div className="bags-items">
+        {bags.map(({ id, h, t, v }) => (
+          <button key={id} className={cls('bag-chip', current === id && 'on', t?.rugged && 'rugged')} onClick={() => onOpen(id)}>
+            <span className="meme-av sm">{h.emoji}</span>
+            <span className="bag-txt">
+              <b>${h.ticker}</b>{t?.rugged && <span className="tag-rug">RUG</span>}
+              <small className="muted mono">{fmtUsd(h.cost, 0)} → {fmtUsd(v)}</small>
+            </span>
+            <b className={cls('mono', pnlClass(v - h.cost))}>{h.cost ? fmtPct((v / h.cost - 1) * 100, 0) : '—'}</b>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MemeZone() {
   const tokens = useStore((s) => s.memes);
   const account = useStore((s) => s.account);
@@ -488,7 +539,7 @@ export default function MemeZone() {
     api('GET', '/api/memes').then((d) => setState({ memes: d.tokens, memeFeed: d.feed })).catch(() => {});
     return () => setMemeMode(false);
   }, []);
-  const held = useMemo(() => new Set(Object.keys(account?.memes || {}).map(Number)), [account]);
+  const held = useMemo(() => new Map(Object.entries(account?.memes || {}).map(([id, h]) => [Number(id), h])), [account]);
   const openTok = (id) => { setOpen(id); window.scrollTo(0, 0); };
   return (
     <div className="page meme-page">
@@ -508,6 +559,7 @@ export default function MemeZone() {
           <button key={k} className={cls(tab === k && !open && 'on')} onClick={() => { setTab(k); setOpen(null); }}>{l}{k === 'bags' && held.size ? ` (${held.size})` : ''}</button>
         ))}
       </div>
+      <MyBagsStrip tokens={tokens} onOpen={openTok} current={open} />
       {open ? <TokenView key={open} id={open} onBack={() => setOpen(null)} />
         : tab === 'board' ? <Board tokens={tokens} onOpen={openTok} held={held} />
           : tab === 'bags' ? <Bags tokens={tokens} onOpen={openTok} />
