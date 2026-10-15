@@ -16,6 +16,7 @@ function gzipChunks(chunks) {
 }
 
 const isMarket = (name) => name.endsWith('.gz');
+const decode = (name, buf) => (isMarket(name) ? JSON.parse(zlib.gunzipSync(buf).toString('utf8')) : name.endsWith('.enc') ? buf.toString('utf8') : JSON.parse(buf.toString('utf8')));
 
 function localStore(dataDir) {
   const legacyFile = path.join(dataDir, 'state.json');
@@ -26,7 +27,7 @@ function localStore(dataDir) {
       const out = {};
       for (const n of names) {
         const f = path.join(dataDir, n);
-        if (fs.existsSync(f)) out[n] = JSON.parse(isMarket(n) ? zlib.gunzipSync(fs.readFileSync(f)).toString('utf8') : fs.readFileSync(f, 'utf8'));
+        if (fs.existsSync(f)) out[n] = decode(n, fs.readFileSync(f));
       }
       if (!out['market.json.gz'] && fs.existsSync(legacyFile)) {
         const data = JSON.parse(fs.readFileSync(legacyFile, 'utf8'));
@@ -74,7 +75,7 @@ function githubStore({ token, repo, branch }) {
         shas[f.path] = f.sha;
         if (!names.includes(f.path)) continue;
         const buf = await blob(f.sha);
-        out[f.path] = JSON.parse(isMarket(f.path) ? zlib.gunzipSync(buf).toString('utf8') : buf.toString('utf8'));
+        out[f.path] = decode(f.path, buf);
       }
       return out;
     },

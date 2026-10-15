@@ -25,6 +25,7 @@ export default function Community() {
   const coins = useStore((s) => s.coins);
   const news = useStore((s) => s.news);
   const chat = useStore((s) => s.chat);
+  const me = useStore((s) => s.me);
   const online = useStore((s) => s.online);
   const tf = useStore((s) => s.tf);
   const [hm, setHm] = useState('ch24');
@@ -120,8 +121,8 @@ export default function Community() {
           <div className="panel-title">💬 Chat des traders</div>
           <div className="chat" ref={chatRef}>
             {chat.map((m, i) => (
-              <div key={i} className={cls('chat-msg', m.me && 'me')}>
-                <span className="muted">{fmtTime(m.t, false)}</span> <b style={{ color: m.me ? '#4f8cff' : `hsl(${hash(m.user) % 360} 60% 65%)` }}>{m.user}</b> {m.text}
+              <div key={i} className={cls('chat-msg', m.uid && m.uid === me?.id && 'me', m.player && 'player')}>
+                <span className="muted">{fmtTime(m.t, false)}</span> {m.avatar && <span>{m.avatar}</span>} <b style={{ color: m.uid && m.uid === me?.id ? '#4f8cff' : `hsl(${hash(m.user) % 360} 60% 65%)` }}>{m.user}</b>{m.player && <span className="tag">joueur</span>} {m.text}
               </div>
             ))}
           </div>

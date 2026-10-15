@@ -38,9 +38,30 @@ function pickArchetype() {
 }
 
 // g = croissance de la réserve $ par minute (le prix évolue ≈ 2 × g), s = volatilité par √minute, act = activité.
+const CELEBS = [
+  ['Elon Tusk', '@eloNtusk', '231 M'], ['Snoopy Dogg', '@SnoopyDogg', '84 M'], ['MrFeast', '@MrFeast', '67 M'], ['Kim Kardashiane', '@KimKardashiane', '75 M'],
+  ['Taylor Shift', '@taylorshift13', '95 M'], ['Cristiano Ronaldinho', '@CR7inho', '112 M'], ['Vitalik Butterin', '@VitalikButterin', '5,8 M'], ['CZ Binancé', '@cz_binance_fr', '9,4 M'],
+  ['Squeezie Jr', '@SqueezieJr', '8,9 M'], ['Kanyé Est', '@kanyeest', '32 M'],
+];
+const TWEETS = [
+  'je viens d\'acheter un peu de ${t} 👀', '${t} to the moon 🚀🚀🚀', 'mon chien adore ${t} 🐕', 'qui connaît ${t} ? 😂', '${t} > tout le reste',
+  'je pense que ${t} va être énorme', 'gm ${t} gang ☀️', 'mon nouveau meme préféré : ${t}',
+];
+
 function phasesFor(arch) {
   const P = [];
-  if (arch === 'dead') {
+  if (arch === 'celeb') {
+    P.push({ d: rand(15, 35), g: rand(1.2, 2.2), s: 0.1, act: 6 });
+    P.push({ d: rand(50, 130), g: rand(0.35, 0.8), s: 0.18, act: 5 });
+    P.push({ d: rand(60, 180), g: rand(-0.12, 0.08), s: 0.22, act: 4 });
+    if (Math.random() < 0.2) P.push({ d: 1, g: 0, s: 0, act: 1, event: 'rug' });
+    P.push({ d: rand(180, 480), g: rand(-0.5, -0.22), s: 0.18, act: 3 });
+    if (Math.random() < 0.35) {
+      P.push({ d: rand(120, 400), g: rand(0.05, 0.2), s: 0.12, act: 2 });
+      P.push({ d: rand(600, 1800), g: rand(-0.06, -0.02), s: 0.06, act: 1.5 });
+    }
+    P.push({ d: rand(1800, 5400), g: rand(-0.01, -0.004), s: 0.03, act: 0.6 });
+  } else if (arch === 'dead') {
     P.push({ d: rand(60, 400), g: rand(0, 0.02), s: 0.03, act: 1 });
     P.push({ d: rand(600, 3000), g: rand(-0.012, -0.004), s: 0.025, act: 0.5 });
   } else if (arch === 'rug') {
@@ -101,15 +122,34 @@ export class MemeMarket {
     this.feed = [];
     this.onEvent = null;
     this.trades = {};
+    this.playerTrades = {};
+    this.nextCeleb = 0;
   }
 
-  spawn(t) {
-    const arch = pickArchetype();
+  recordPlayer(id, tr) {
+    const l = this.playerTrades[id] || (this.playerTrades[id] = []);
+    l.push(tr);
+    if (l.length > 300) l.splice(0, l.length - 250);
+  }
+
+  spawnCeleb(t) {
+    const tk = this.spawn(t, 'celeb');
+    const [name, handle, followers] = pick(CELEBS);
+    const tweet = pick(TWEETS).replace('${t}', '$' + tk.ticker);
+    tk.celeb = { name, handle, followers, tweet };
+    tk.socials = { x: true, tg: true, web: Math.random() < 0.5 };
+    tk.story = `Mentionné par ${name} (${followers} abonnés) sur X.`;
+    this.emit({ t, kind: 'celeb', id: tk.id, text: `🚨 ${name} (${handle}) vient de tweeter : « ${tweet} »`, celeb: tk.celeb, ticker: tk.ticker, emoji: tk.emoji, name: tk.name });
+    return tk;
+  }
+
+  spawn(t, forced) {
+    const arch = forced || pickArchetype();
     const { name, ticker, emoji } = makeName();
     const shady = arch === 'rug' || (arch === 'pumpdump' && Math.random() < 0.6);
     const looksClean = Math.random() < 0.25;
     const bad = shady && !looksClean;
-    const good = arch === 'runner' || arch === 'moon';
+    const good = arch === 'runner' || arch === 'moon' || arch === 'celeb';
     const R0 = rand(4200, 6000);
     const T0 = SUPPLY;
     const top10 = bad ? rand(35, 65) : good ? rand(14, 30) : rand(20, 45);
@@ -126,7 +166,7 @@ export class MemeMarket {
     tk.phaseEnd = t + tk.phases[0].d;
     tk.athMcap = this.mcap(tk);
     this.tokens.push(tk);
-    this.emit({ t, kind: 'launch', id: tk.id, text: `${emoji} ${name} ($${ticker}) vient d'être lancé` });
+    if (!forced) this.emit({ t, kind: 'launch', id: tk.id, text: `${emoji} ${name} ($${ticker}) vient d'être lancé` });
     return tk;
   }
 
@@ -148,6 +188,10 @@ export class MemeMarket {
 
   step(dt, t, live) {
     if (t - this.lastSpawn > 0 && Math.random() < dt / SPAWN_EVERY) { this.lastSpawn = t; this.spawn(t); }
+    if (live) {
+      if (!this.nextCeleb) this.nextCeleb = t + rand(4, 12) * 60;
+      if (t >= this.nextCeleb) { this.nextCeleb = t + rand(25, 50) * 60; this.spawnCeleb(t); }
+    }
     const keepS5 = live || t >= this.s5From;
     for (const tk of this.tokens) {
       while (t >= tk.phaseEnd && tk.phase < tk.phases.length - 1) {
@@ -289,7 +333,7 @@ export class MemeMarket {
       vol5m: v5, vol1h: v1h, vol24: v24, holders: tk.holders, buys: tk.buys, sells: tk.sells,
       graduated: tk.graduated, rugged: tk.rugged, progress: tk.graduated ? 100 : Math.min(100, ((p * SUPPLY) / GRAD_MCAP) * 100),
       devPct: tk.devPct, devSold: tk.devSold, top10: tk.top10, snipers: tk.snipers, bundled: tk.bundled, socials: tk.socials,
-      lastActivity: tk.lastActivity * 1000,
+      lastActivity: tk.lastActivity * 1000, celeb: tk.celeb || null,
     };
   }
 
@@ -358,7 +402,9 @@ export class MemeMarket {
 
   *serializeChunks() {
     const pack = (arr) => arr.map((c) => [c[0], +c[1].toPrecision(6), +c[2].toPrecision(6), +c[3].toPrecision(6), +c[4].toPrecision(6), +c[5].toPrecision(3)]);
-    yield `{"time":${this.time},"nextId":${this.nextId},"lastSpawn":${this.lastSpawn},"feed":${JSON.stringify(this.feed.slice(-100))},"tokens":[`;
+    const ids = new Set(this.tokens.map((x) => x.id));
+    const pt = Object.fromEntries(Object.entries(this.playerTrades).filter(([id]) => ids.has(Number(id))));
+    yield `{"time":${this.time},"nextId":${this.nextId},"lastSpawn":${this.lastSpawn},"playerTrades":${JSON.stringify(pt)},"feed":${JSON.stringify(this.feed.slice(-100))},"tokens":[`;
     let first = true;
     for (const tk of this.tokens) {
       const phases = tk.phases.map((p) => ({ ...p, d: isFinite(p.d) ? p.d : -1 }));
@@ -373,6 +419,7 @@ export class MemeMarket {
     this.nextId = data.nextId;
     this.lastSpawn = data.lastSpawn;
     this.feed = data.feed || [];
+    this.playerTrades = data.playerTrades || {};
     this.tokens = data.tokens.map((tk) => ({ ...tk, phaseEnd: tk.phaseEnd < 0 ? Infinity : tk.phaseEnd, phases: tk.phases.map((p) => ({ ...p, d: p.d < 0 ? Infinity : p.d })) }));
   }
 }

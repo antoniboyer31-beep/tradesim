@@ -8,9 +8,12 @@ import Academy from './pages/Academy.jsx';
 import Community, { fearGreed, fgLabel } from './pages/Community.jsx';
 import Journal from './pages/Journal.jsx';
 import MemeZone from './pages/MemeZone.jsx';
+import Leaderboard from './pages/Leaderboard.jsx';
+import Admin from './pages/Admin.jsx';
+import CelebAlert from './components/CelebAlert.jsx';
 
 const PAGES = [
-  ['trade', '📊 Trading'], ['meme', '🐸 Meme Zone'], ['portfolio', '💼 Portefeuille'], ['tools', '🧰 Outils'], ['academy', '🎓 Académie'], ['community', '🌍 Marché & communauté'], ['journal', '📓 Journal'],
+  ['trade', '📊 Trading'], ['meme', '🐸 Meme Zone'], ['leaderboard', '🏆 Classement'], ['portfolio', '💼 Portefeuille'], ['tools', '🧰 Outils'], ['academy', '🎓 Académie'], ['community', '🌍 Communauté'], ['journal', '📓 Journal'],
 ];
 
 function Clock() {
@@ -24,6 +27,8 @@ function TopBar() {
   const account = useStore((s) => s.account);
   const connected = useStore((s) => s.connected);
   const online = useStore((s) => s.online);
+  const me = useStore((s) => s.me);
+  const players = useStore((s) => s.players);
   const tickers = useStore((s) => s.tickers);
   const fg = fearGreed(tickers);
   const net = account ? account.deposits - account.withdrawals : 0;
@@ -36,9 +41,11 @@ function TopBar() {
       </div>
       <nav>
         {PAGES.map(([k, l]) => <button key={k} className={cls(page === k && 'on')} onClick={() => setState({ page: k })}>{l}</button>)}
+        {me?.admin && <button className={cls(page === 'admin' && 'on')} onClick={() => setState({ page: 'admin' })}>🛡️ Admin</button>}
       </nav>
       <div className="top-right">
         <span className="fg-pill" title="Indice Peur & Avidité du marché">{fgLabel(fg)} · {fg}</span>
+        <span className="online-pill" title="Vrais joueurs connectés">🎮 {players}</span>
         <span className="online-pill" title="Traders connectés"><i className={cls('dot-live', !connected && 'off')} /> {connected ? online.toLocaleString('fr-FR') : 'Hors ligne'}</span>
         <Clock />
         {account && (
@@ -49,6 +56,7 @@ function TopBar() {
           </div>
         )}
         <button className="primary small" onClick={() => setState({ moneyOpen: true })}>💰 Argent</button>
+        {me && <button className="me-btn" onClick={() => setState({ profileOpen: true })} title="Mon profil"><span>{me.avatar}</span><b>{me.name}</b></button>}
       </div>
     </header>
   );
@@ -73,6 +81,7 @@ function TickerTape() {
 function MoneyModal() {
   const open = useStore((s) => s.moneyOpen);
   const account = useStore((s) => s.account);
+  const me = useStore((s) => s.me);
   const [amount, setAmount] = useState('');
   const [resetBal, setResetBal] = useState('10000');
   const [challenge, setChallenge] = useState(() => localStorage.getItem('ts.challenge') === '1');
@@ -90,26 +99,34 @@ function MoneyModal() {
           <div><span>Total déposé</span><b className="mono">{fmtUsd(account.deposits)}</b></div>
           <div><span>Total retiré</span><b className="mono">{fmtUsd(account.withdrawals)}</b></div>
         </div>
-        <label className="switch-row">
-          <input type="checkbox" checked={challenge} onChange={toggleChallenge} />
-          <div><b>Mode réaliste (challenge)</b><small className="muted">Désactive les dépôts : tu dois faire fructifier ton capital comme avec de l'argent réel.</small></div>
-        </label>
-        <h3>Ajouter de l'argent</h3>
-        <div className={cls('presets', challenge && 'disabled')}>
-          {[1000, 5000, 10000, 50000, 100000, 1000000].map((a) => <button key={a} disabled={challenge} onClick={() => dep(a)}>+{a.toLocaleString('fr-FR')} $</button>)}
-        </div>
-        <div className="row-input">
-          <input type="number" placeholder="Montant personnalisé" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <button className="buy-btn" disabled={challenge || !amount} onClick={() => { dep(Number(amount)); setAmount(''); }}>Déposer</button>
-          <button className="sell-btn" disabled={!amount} onClick={() => { api('POST', '/api/account/withdraw', { amount: Number(amount) }).catch(() => {}); setAmount(''); }}>Retirer</button>
-        </div>
+        {me?.admin ? (
+          <>
+            <label className="switch-row">
+              <input type="checkbox" checked={challenge} onChange={toggleChallenge} />
+              <div><b>Mode réaliste (challenge)</b><small className="muted">Désactive les dépôts : tu dois faire fructifier ton capital comme avec de l'argent réel.</small></div>
+            </label>
+            <h3>Ajouter de l'argent (admin)</h3>
+            <div className={cls('presets', challenge && 'disabled')}>
+              {[1000, 5000, 10000, 50000, 100000, 1000000].map((a) => <button key={a} disabled={challenge} onClick={() => dep(a)}>+{a.toLocaleString('fr-FR')} $</button>)}
+            </div>
+            <div className="row-input">
+              <input type="number" placeholder="Montant personnalisé" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <button className="buy-btn" disabled={challenge || !amount} onClick={() => { dep(Number(amount)); setAmount(''); }}>Déposer</button>
+              <button className="sell-btn" disabled={!amount} onClick={() => { api('POST', '/api/account/withdraw', { amount: Number(amount) }).catch(() => {}); setAmount(''); }}>Retirer</button>
+            </div>
+          </>
+        ) : (
+          <p className="small muted">Mode multijoueur : tout le monde démarre avec 10 000 $ et personne ne peut s'ajouter de l'argent, pour que le classement reste équitable. Seul l'admin peut en donner.</p>
+        )}
         <h3>Recommencer à zéro</h3>
         <p className="small muted">Ferme tout, efface l'historique de trades et repart avec un nouveau capital (ton journal est conservé). Le marché, lui, continue.</p>
         <div className="row-input">
-          <select value={resetBal} onChange={(e) => setResetBal(e.target.value)}>
-            {[100, 1000, 10000, 50000, 100000, 1000000].map((v) => <option key={v} value={v}>{v.toLocaleString('fr-FR')} $</option>)}
-          </select>
-          <button className="sell-btn" onClick={() => confirm('Réinitialiser complètement ton compte ?') && api('POST', '/api/account/reset', { balance: Number(resetBal) }).then(close).catch(() => {})}>Réinitialiser le compte</button>
+          {me?.admin && (
+            <select value={resetBal} onChange={(e) => setResetBal(e.target.value)}>
+              {[100, 1000, 10000, 50000, 100000, 1000000].map((v) => <option key={v} value={v}>{v.toLocaleString('fr-FR')} $</option>)}
+            </select>
+          )}
+          <button className="sell-btn" onClick={() => confirm('Réinitialiser complètement ton compte ? Tu repartiras avec 10 000 $.') && api('POST', '/api/account/reset', { balance: Number(resetBal) }).then(close).catch(() => {})}>Réinitialiser le compte{me?.admin ? '' : ' (10 000 $)'}</button>
         </div>
       </div>
     </div>
@@ -157,6 +174,36 @@ function AwayModal() {
   );
 }
 
+function ProfileModal() {
+  const open = useStore((s) => s.profileOpen);
+  const me = useStore((s) => s.me);
+  const avatars = useStore((s) => s.avatars);
+  const [old, setOld] = useState('');
+  const [pw, setPw] = useState('');
+  if (!open || !me) return null;
+  const close = () => setState({ profileOpen: false });
+  const pick = (a) => api('POST', '/api/me/avatar', { avatar: a }).then((d) => setState({ me: d.me })).catch(() => {});
+  const changePw = () => api('POST', '/api/me/password', { old, password: pw }).then(() => { location.href = '/login'; }).catch(() => {});
+  return (
+    <div className="modal-bg" onClick={close}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><h2><span className="lb-av big">{me.avatar}</span> {me.name}{me.admin && <span className="tag">admin</span>}</h2><button className="x" onClick={close}>✕</button></div>
+        <h3>Ma photo de profil</h3>
+        <p className="small muted">Elle apparaît dans le classement, le chat et sur les graphiques des meme coins à l'endroit où tu achètes.</p>
+        <div className="av-grid">{avatars.map((a) => <button key={a} className={cls(a === me.avatar && 'on')} onClick={() => pick(a)}>{a}</button>)}</div>
+        <h3>Changer de mot de passe</h3>
+        <div className="row-input">
+          <input type="password" placeholder="Ancien" value={old} onChange={(e) => setOld(e.target.value)} />
+          <input type="password" placeholder="Nouveau" value={pw} onChange={(e) => setPw(e.target.value)} />
+          <button className="primary" disabled={!old || pw.length < 4} onClick={changePw}>Changer</button>
+        </div>
+        <h3>Session</h3>
+        <a className="sell-btn logout" href="/logout">Se déconnecter</a>
+      </div>
+    </div>
+  );
+}
+
 function Toasts() {
   const toasts = useStore((s) => s.toasts);
   return (
@@ -187,9 +234,13 @@ export default function App() {
         {page === 'community' && <Community />}
         {page === 'journal' && <Journal />}
         {page === 'meme' && <MemeZone />}
+        {page === 'leaderboard' && <Leaderboard />}
+        {page === 'admin' && <Admin />}
       </main>
       <MoneyModal />
       <AwayModal />
+      <ProfileModal />
+      <CelebAlert />
       <Toasts />
     </div>
   );

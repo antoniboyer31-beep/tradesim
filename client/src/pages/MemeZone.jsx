@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useStore, setState, api, setMemeMode, subscribeMeme, onMemeTick } from '../lib/store.js';
+import { useStore, setState, api, setMemeMode, subscribeMeme, onMemeTick, onPlayerTrade } from '../lib/store.js';
 import { fmtUsd, fmtSigned, fmtPct, fmtCompact, fmtQty, fmtTime, fmtDuration, cls, pnlClass } from '../lib/format.js';
 import MemeChart from '../components/MemeChart.jsx';
 import { MEME_TIPS, MEME_GUIDE, MEME_GLOSSARY } from '../data/memeGuide.js';
@@ -222,11 +222,13 @@ function TokenView({ id, onBack }) {
   const [tf, setTf] = useState('5s');
   const [mode, setMode] = useState('mcap');
   const [trades, setTrades] = useState([]);
+  const [pTrades, setPTrades] = useState(null);
   const account = useStore((s) => s.account);
+  const me = useStore((s) => s.me);
   const holding = account?.memes?.[id];
   useEffect(() => {
     let alive = true;
-    const load = () => api('GET', `/api/memes/${id}`).then(({ token }) => { if (alive) { setD(token); setTrades((x) => (x.length ? x : token.trades.slice().reverse())); } }).catch(() => onBack());
+    const load = () => api('GET', `/api/memes/${id}`).then(({ token }) => { if (alive) { setD(token); setTrades((x) => (x.length ? x : token.trades.slice().reverse())); setPTrades((x) => x ?? token.playerTrades); } }).catch(() => onBack());
     load();
     const i = setInterval(load, 15000);
     return () => { alive = false; clearInterval(i); };
@@ -238,7 +240,8 @@ function TokenView({ id, onBack }) {
       setD((x) => (x ? { ...x, ...m.stats } : x));
       if (m.trades.length) setTrades((x) => [...m.trades.slice().reverse(), ...x].slice(0, 40));
     });
-    return () => { off(); subscribeMeme(null); };
+    const offP = onPlayerTrade((m) => { if (m.id === id) setPTrades((x) => [...(x || []), m.trade]); });
+    return () => { off(); offP(); subscribeMeme(null); };
   }, [id, tf]);
   if (!d) return <p className="muted pad">Chargement…</p>;
   const r = riskOf(d);
@@ -273,7 +276,7 @@ function TokenView({ id, onBack }) {
               <span className="tfs">{['5s', '15s', '1m', '5m', '15m', '1h'].map((x) => <button key={x} className={cls('chip', tf === x && 'on')} onClick={() => setTf(x)}>{x}</button>)}</span>
               <span className="tfs"><button className={cls('chip', mode === 'mcap' && 'on')} onClick={() => setMode('mcap')}>Market cap</button><button className={cls('chip', mode === 'price' && 'on')} onClick={() => setMode('price')}>Prix</button></span>
             </div>
-            <MemeChart id={id} tf={tf} mode={mode} />
+            <MemeChart id={id} tf={tf} mode={mode} playerTrades={pTrades || []} meId={me?.id} />
           </div>
           <div className="stats-grid">
             <div className="stat"><span>Prix</span><b className="mono">{d.price.toPrecision(4)} $</b></div>
@@ -312,6 +315,29 @@ function TokenView({ id, onBack }) {
         </div>
         <div className="meme-right">
           <TradeBox t={d} holding={holding} />
+          <div className="panel pad">
+            <div className="panel-title"><span>🎮 Joueurs sur ce token</span><span className="small muted">{d.players.length} joueur{d.players.length > 1 ? 's' : ''}</span></div>
+            {d.players.length ? d.players.map((p) => (
+              <div key={p.id} className={cls('player-row small', p.id === me?.id && 'me')}>
+                <span className="lb-av">{p.avatar}</span>
+                <span className="ellip"><b>{p.name}</b><br /><span className="muted">entré à {fmtCompact(p.entryMcap)} $ de MC</span></span>
+                <span className="mono">{fmtUsd(p.cost, 0)} → {fmtUsd(p.qty * d.price, 0)}</span>
+                <b className={cls('mono', pnlClass(p.qty * d.price - p.cost))}>x{(p.qty * d.price / p.cost).toFixed(2)}</b>
+              </div>
+            )) : <p className="small muted">Aucun joueur n'a encore de bag ici. Sois le premier !</p>}
+            {(pTrades || []).length > 0 && (
+              <>
+                <div className="small muted" style={{ marginTop: 8 }}>Derniers trades des joueurs</div>
+                {(pTrades || []).slice(-8).reverse().map((x, i) => (
+                  <div key={x.t + '-' + i} className="small player-trade">
+                    <span>{x.avatar} <b>{x.name}</b></span>
+                    <span className={x.side === 'buy' ? 'up' : 'down'}>{x.side === 'buy' ? 'achète' : 'vend'} {fmtUsd(x.usd, 0)}</span>
+                    <span className="muted">à {fmtCompact(x.mcap)} $ · {fmtTime(x.t)}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
           <div className="panel pad">
             <div className="panel-title"><span>🛡️ Rug check</span><span className={cls('risk-pill', riskCls(r.score))}>Risque {r.label} · {r.score}/100</span></div>
             <div className="checks">{r.checks.map(([lvl, txt], i) => <div key={i} className={cls('check', lvl)}>{lvl === 'ok' ? '✅' : lvl === 'warn' ? '⚠️' : '❌'} {txt}</div>)}</div>
@@ -533,7 +559,8 @@ export default function MemeZone() {
   const tokens = useStore((s) => s.memes);
   const account = useStore((s) => s.account);
   const [tab, setTab] = useState('board');
-  const [open, setOpen] = useState(null);
+  const open = useStore((s) => s.memeOpen);
+  const setOpen = (id) => setState({ memeOpen: id });
   useEffect(() => {
     setMemeMode(true);
     api('GET', '/api/memes').then((d) => setState({ memes: d.tokens, memeFeed: d.feed })).catch(() => {});

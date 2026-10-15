@@ -18,6 +18,11 @@ let state = {
   pickedPrice: null,
   page: 'trade',
   moneyOpen: false,
+  me: null,
+  avatars: [],
+  players: 0,
+  celebAlert: null,
+  announce: null,
   memes: [],
   memeFeed: [],
   memeOn: false,
@@ -54,6 +59,34 @@ export function subscribeMeme(id, tf) {
   wsSend({ type: 'memeSub', id, tf });
 }
 
+const playerListeners = new Set();
+export function onPlayerTrade(fn) {
+  playerListeners.add(fn);
+  return () => playerListeners.delete(fn);
+}
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.18, 0.36].forEach((d, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880 + i * 220;
+      g.gain.setValueAtTime(0.15, ctx.currentTime + d);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d + 0.16);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime + d);
+      o.stop(ctx.currentTime + d + 0.17);
+    });
+  } catch { /* audio indisponible */ }
+}
+function celebAlert(ev) {
+  setState({ celebAlert: { ...ev, at: Date.now() } });
+  beep();
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification('🚨 TradeSim — Tweet de ' + ev.celeb.name, { body: `« ${ev.celeb.tweet} » — Achète vite $${ev.ticker} !` });
+  }
+}
+
 const candleListeners = new Set();
 export function onCandle(fn) {
   candleListeners.add(fn);
@@ -80,7 +113,7 @@ export function connect() {
     const msg = JSON.parse(e.data);
     switch (msg.type) {
       case 'hello':
-        setState({ tickers: toMap(msg.tickers), account: msg.account, online: msg.online });
+        setState({ tickers: toMap(msg.tickers), account: msg.account, online: msg.online, players: msg.players || 0 });
         break;
       case 'tick':
         setState({ tickers: toMap(msg.tickers) });
@@ -99,7 +132,7 @@ export function connect() {
         setState({ account: msg.account });
         break;
       case 'online':
-        setState({ online: msg.online });
+        setState({ online: msg.online, players: msg.players ?? state.players });
         break;
       case 'chat':
         setState((s) => ({ chat: [...s.chat, msg.msg].slice(-100) }));
@@ -119,6 +152,19 @@ export function connect() {
         break;
       case 'memeEvent':
         setState((s) => ({ memeFeed: [msg.event, ...s.memeFeed].slice(0, 80) }));
+        if (msg.event.kind === 'celeb') celebAlert(msg.event);
+        break;
+      case 'memePlayer': {
+        const tr = msg.trade;
+        playerListeners.forEach((fn) => fn(msg));
+        const text = `${tr.avatar} ${tr.name} a ${tr.side === 'buy' ? 'acheté' : 'vendu'} ${Math.round(tr.usd).toLocaleString('fr-FR')} $ de ${msg.emoji || ''} $${msg.ticker}`;
+        setState((s) => ({ memeFeed: [{ t: tr.t / 1000, kind: 'player-' + tr.side, id: msg.id, text }, ...s.memeFeed].slice(0, 80) }));
+        if (tr.uid !== state.me?.id && state.memeOn && tr.usd >= 100) toast(tr.side === 'buy' ? 'news-up' : 'news-down', text);
+        break;
+      }
+      case 'announce':
+        setState({ announce: { text: msg.text, from: msg.from, t: Date.now() } });
+        toast('alert', `📢 ${msg.from} : ${msg.text}`);
         break;
     }
   };
@@ -169,8 +215,9 @@ export async function api(method, url, body) {
 }
 
 export async function loadInitial() {
-  const [coins, news, chat] = await Promise.all([api('GET', '/api/coins'), api('GET', '/api/news'), api('GET', '/api/chat')]);
+  const [coins, news, chat, me] = await Promise.all([api('GET', '/api/coins'), api('GET', '/api/news'), api('GET', '/api/chat'), api('GET', '/api/me')]);
   setState({
+    me: me.me, avatars: me.avatars,
     coins: coins.coins, coinMap: Object.fromEntries(coins.coins.map((c) => [c.sym, c])),
     tickers: toMap(coins.tickers), news: news.news, chat: chat.chat,
   });

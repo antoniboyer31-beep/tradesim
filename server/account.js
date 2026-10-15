@@ -309,7 +309,7 @@ export class Account {
     if (t - this.lastEquityAt >= 300) {
       this.lastEquityAt = t;
       s.equity.push([Math.floor(t), this.equity()]);
-      if (s.equity.length > 12000) s.equity.splice(0, s.equity.length - 10000);
+      if (s.equity.length > 6000) s.equity.splice(0, s.equity.length - 5000);
     }
   }
 

@@ -599,3 +599,49 @@ textarea { resize: vertical; }
 .pos-banner { display: flex; flex-direction: column; background: rgba(79,140,255,.12); border: 1px solid rgba(79,140,255,.45); border-radius: 9px; padding: 6px 12px; margin-left: auto; }
 .pos-banner + .meme-head-mc { margin-left: 0; }
 @media (max-width: 760px) { .bags-strip { flex-direction: column; align-items: stretch; } .pos-banner { margin-left: 0; } }
+
+/* Multijoueur */
+.me-btn { display: flex; align-items: center; gap: 6px; background: var(--panel2); border: 1px solid var(--border2); border-radius: 20px; padding: 3px 10px 3px 4px; }
+.me-btn span { font-size: 20px; width: 28px; height: 28px; display: grid; place-items: center; background: #1d2638; border-radius: 50%; }
+.me-btn:hover { border-color: var(--accent); }
+.lb-av { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #1d2638; font-size: 16px; vertical-align: middle; }
+.lb-av.big { width: 40px; height: 40px; font-size: 26px; }
+.av-grid { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; }
+.av-grid button { font-size: 22px; height: 40px; border-radius: 9px; background: var(--panel2); border: 2px solid transparent; }
+.av-grid button.on { border-color: var(--up); background: #16302a; }
+.logout { display: inline-block; text-align: center; color: #fff; }
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 14px; padding: 10px 0; }
+.podium-step { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 170px; }
+.podium-step.me b { color: var(--accent); }
+.pod-av { font-size: 40px; width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #2b3550, #161c29); border: 2px solid var(--border2); }
+.p1 .pod-av { border-color: #f0b90b; width: 78px; height: 78px; font-size: 48px; }
+.pod-block { width: 100%; border-radius: 10px 10px 0 0; display: grid; place-items: center; font-size: 26px; font-weight: 800; color: rgba(255,255,255,.5); margin-top: 6px; }
+.p1 .pod-block { height: 110px; background: linear-gradient(180deg, rgba(240,185,11,.35), rgba(240,185,11,.05)); }
+.p2 .pod-block { height: 80px; background: linear-gradient(180deg, rgba(180,190,210,.3), rgba(180,190,210,.04)); }
+.p3 .pod-block { height: 60px; background: linear-gradient(180deg, rgba(205,127,50,.3), rgba(205,127,50,.04)); }
+.admin-money { display: flex; gap: 4px; align-items: center; }
+.admin-money input { width: 100px; padding: 4px 6px; }
+.admin-actions { display: flex; gap: 4px; }
+.sell-btn.small, .buy-btn.small { padding: 4px 9px; font-size: 12px; }
+.player-row { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid #151b26; }
+.player-row.me b { color: var(--accent); }
+.player-trade { display: flex; gap: 6px; flex-wrap: wrap; padding: 3px 0; }
+.feed-item.player-buy { background: rgba(79,140,255,.12); }
+.feed-item.player-sell { background: rgba(240,185,11,.08); }
+.feed-item.celeb { background: rgba(234,57,67,.18); border: 1px solid rgba(234,57,67,.5); }
+.chat-msg.player { background: rgba(79,140,255,.06); }
+.celeb { position: fixed; right: 18px; bottom: 18px; z-index: 60; width: min(420px, calc(100vw - 24px)); background: #12131c; border: 2px solid var(--down); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 0 0 4px rgba(234,57,67,.15), 0 20px 50px rgba(0,0,0,.6); animation: celebIn .35s ease-out, celebPulse 1.2s ease-in-out infinite; }
+@keyframes celebIn { from { transform: translateY(40px) scale(.95); opacity: 0; } }
+@keyframes celebPulse { 50% { box-shadow: 0 0 0 9px rgba(234,57,67,.08), 0 20px 50px rgba(0,0,0,.6); } }
+.celeb-head { display: flex; align-items: center; gap: 10px; }
+.celeb-head .x { margin-left: auto; background: none; border: 0; font-size: 18px; color: var(--muted); }
+.celeb-flash { background: var(--down); color: #fff; font-weight: 800; padding: 3px 9px; border-radius: 6px; letter-spacing: .5px; animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .55; } }
+.tweet { display: flex; gap: 10px; background: #0b0d14; border: 1px solid #262b38; border-radius: 12px; padding: 10px; }
+.tw-av { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, #4f8cff, #8e5cf0); display: grid; place-items: center; font-weight: 800; font-size: 18px; }
+.tw-text { font-size: 15px; margin-top: 3px; }
+.celeb-token { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.celeb-buys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.celeb-buys .buy-btn { padding: 10px; font-size: 14px; }
+.celeb-foot { display: flex; justify-content: space-between; align-items: center; }
+@media (max-width: 760px) { .celeb { right: 12px; bottom: 12px; } .podium-step { width: 105px; } .av-grid { grid-template-columns: repeat(6, 1fr); } }
