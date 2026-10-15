@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useStore, setState, api, subscribeMarket } from './lib/store.js';
+import { useStore, setState, api, subscribeMarket, dismissToast } from './lib/store.js';
 import { fmtUsd, fmtSigned, fmtPct, fmtPrice, fmtDateTime, fmtDuration, cls, pnlClass } from './lib/format.js';
 import Trade from './pages/Trade.jsx';
 import Portfolio from './pages/Portfolio.jsx';
@@ -208,7 +208,7 @@ function Toasts() {
   const toasts = useStore((s) => s.toasts);
   return (
     <div className="toasts">
-      {toasts.map((t) => <div key={t.id} className={cls('toast', t.type)}>{t.message}</div>)}
+      {toasts.map((t) => <div key={t.id} className={cls('toast', t.type)} onClick={() => dismissToast(t.id)}>{t.message}</div>)}
     </div>
   );
 }

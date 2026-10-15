@@ -193,10 +193,14 @@ function handleEvent(ev) {
 }
 
 let toastId = 1;
+export function dismissToast(id) {
+  setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+}
+
 export function toast(type, message) {
   const id = toastId++;
   setState((s) => ({ toasts: [...s.toasts, { id, type, message }].slice(-5) }));
-  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), type === 'error' ? 5000 : 6500);
+  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 5000);
 }
 
 export async function api(method, url, body) {

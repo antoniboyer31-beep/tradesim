@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, setState, useStore } from '../lib/store.js';
 import { fmtCompact, fmtUsd } from '../lib/format.js';
 
-const LIFETIME = 120_000;
+const LIFETIME = 5000;
 
 export default function CelebAlert() {
   const a = useStore((s) => s.celebAlert);
@@ -10,6 +10,8 @@ export default function CelebAlert() {
   const [tk, setTk] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [startMc, setStartMc] = useState(null);
+  const hover = useRef(false);
+  const lastActive = useRef(0);
   useEffect(() => {
     if (!a) return;
     setTk(null);
@@ -21,9 +23,14 @@ export default function CelebAlert() {
       setStartMc((x) => x ?? token.mcap);
     }).catch(() => {});
     load();
-    const i = setInterval(() => { setNow(Date.now()); load(); }, 1000);
-    const end = setTimeout(() => setState({ celebAlert: null }), LIFETIME);
-    return () => { alive = false; clearInterval(i); clearTimeout(end); };
+    lastActive.current = Date.now();
+    const i = setInterval(() => {
+      setNow(Date.now());
+      if (hover.current) lastActive.current = Date.now();
+      else if (Date.now() - lastActive.current >= LIFETIME) return setState({ celebAlert: null });
+      load();
+    }, 500);
+    return () => { alive = false; clearInterval(i); };
   }, [a?.id, a?.at]);
   if (!a) return null;
   const close = () => setState({ celebAlert: null });
@@ -31,7 +38,7 @@ export default function CelebAlert() {
   const since = Math.floor((now - a.at) / 1000);
   const mult = tk && startMc ? tk.mcap / startMc : 1;
   return (
-    <div className="celeb">
+    <div className="celeb" onMouseEnter={() => { hover.current = true; }} onMouseLeave={() => { hover.current = false; lastActive.current = Date.now(); }}>
       <div className="celeb-head">
         <span className="celeb-flash">🚨 ALERTE TWEET</span>
         <span className="muted small">il y a {since} s</span>
