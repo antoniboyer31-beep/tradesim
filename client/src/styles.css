@@ -630,7 +630,7 @@ textarea { resize: vertical; }
 .feed-item.player-sell { background: rgba(240,185,11,.08); }
 .feed-item.celeb { background: rgba(234,57,67,.18); border: 1px solid rgba(234,57,67,.5); }
 .chat-msg.player { background: rgba(79,140,255,.06); }
-.celeb { position: fixed; right: 18px; bottom: 18px; z-index: 60; width: min(420px, calc(100vw - 24px)); background: #12131c; border: 2px solid var(--down); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 0 0 4px rgba(234,57,67,.15), 0 20px 50px rgba(0,0,0,.6); animation: celebIn .35s ease-out, celebPulse 1.2s ease-in-out infinite; }
+.celeb-alert { position: fixed; right: 18px; bottom: 18px; z-index: 60; width: min(420px, calc(100vw - 24px)); background: #12131c; border: 2px solid var(--down); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 0 0 4px rgba(234,57,67,.15), 0 20px 50px rgba(0,0,0,.6); animation: celebIn .35s ease-out, celebPulse 1.2s ease-in-out infinite; }
 @keyframes celebIn { from { transform: translateY(40px) scale(.95); opacity: 0; } }
 @keyframes celebPulse { 50% { box-shadow: 0 0 0 9px rgba(234,57,67,.08), 0 20px 50px rgba(0,0,0,.6); } }
 .celeb-head { display: flex; align-items: center; gap: 10px; }
@@ -644,4 +644,4 @@ textarea { resize: vertical; }
 .celeb-buys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .celeb-buys .buy-btn { padding: 10px; font-size: 14px; }
 .celeb-foot { display: flex; justify-content: space-between; align-items: center; }
-@media (max-width: 760px) { .celeb { right: 12px; bottom: 12px; } .podium-step { width: 105px; } .av-grid { grid-template-columns: repeat(6, 1fr); } }
+@media (max-width: 760px) { .celeb-alert { right: 12px; bottom: 12px; } .podium-step { width: 105px; } .av-grid { grid-template-columns: repeat(6, 1fr); } }

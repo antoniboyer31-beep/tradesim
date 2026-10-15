@@ -38,7 +38,7 @@ export default function CelebAlert() {
   const since = Math.floor((now - a.at) / 1000);
   const mult = tk && startMc ? tk.mcap / startMc : 1;
   return (
-    <div className="celeb" onMouseEnter={() => { hover.current = true; }} onMouseLeave={() => { hover.current = false; lastActive.current = Date.now(); }}>
+    <div className="celeb-alert" onMouseEnter={() => { hover.current = true; }} onMouseLeave={() => { hover.current = false; lastActive.current = Date.now(); }}>
       <div className="celeb-head">
         <span className="celeb-flash">🚨 ALERTE TWEET</span>
         <span className="muted small">il y a {since} s</span>
