@@ -4,9 +4,10 @@ import { fmtUsd, fmtSigned, fmtDuration, cls, pnlClass } from '../lib/format.js'
 
 export default function Admin() {
   const [players, setPlayers] = useState([]);
+  const [celeb, setCeleb] = useState(null);
   const [amounts, setAmounts] = useState({});
   const [msg, setMsg] = useState('');
-  const load = () => api('GET', '/api/admin/users').then((d) => setPlayers(d.players)).catch(() => {});
+  const load = () => api('GET', '/api/admin/users').then((d) => { setPlayers(d.players); setCeleb({ at: d.nextCeleb, done: d.celebDone }); }).catch(() => {});
   useEffect(() => { load(); const i = setInterval(load, 5000); return () => clearInterval(i); }, []);
   const act = (p, label) => p.then(() => { toast('fill', label); load(); }).catch(() => {});
   const money = (u, sign) => {
@@ -25,7 +26,8 @@ export default function Admin() {
       <div className="grid-2">
         <div className="panel pad">
           <h3>🚨 Tweet de célébrité</h3>
-          <p className="small muted">Lance tout de suite un meme coin qui explose après le tweet d'une star. Tous les joueurs reçoivent une alerte. Il en arrive aussi automatiquement toutes les 25 à 50 minutes.</p>
+          <p className="small muted">Lance tout de suite un meme coin qui explose après le tweet d'une star. Tous les joueurs reçoivent une alerte. Il en arrive aussi automatiquement une par tranche de 2 h (0 h-2 h, 2 h-4 h…), à un moment aléatoire, et ce bouton n'y change rien.</p>
+          {celeb && <p className="small">{celeb.done ? `✅ Le tweet automatique de cette tranche est déjà passé. Prochaine tranche à partir de ${new Date(celeb.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' })}.` : `⏰ Prochain tweet automatique prévu vers ${new Date(celeb.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' })} (secret, ne le dis pas aux joueurs 😉).`}</p>}
           <button className="primary" onClick={() => act(api('POST', '/api/admin/celeb'), 'Tweet lancé !')}>🚀 Déclencher un tweet maintenant</button>
         </div>
         <div className="panel pad">

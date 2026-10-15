@@ -10,7 +10,7 @@ import { COINS } from './coins.js';
 import { chatMessage, randomUser } from './social.js';
 import { createAuth } from './auth.js';
 import { createStore } from './persist.js';
-import { MemeMarket, SUPPLY } from './memes.js';
+import { MemeMarket, SUPPLY, celebWindow } from './memes.js';
 import { Users, AVATARS, START_BALANCE, encryptJson, decryptJson } from './users.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -184,6 +184,7 @@ app.delete('/api/journal/:id', wrap((req, acc) => { acc.removeJournal(req.params
 app.post('/api/notifications/clear', wrap((_req, acc) => { acc.clearNotifications(); }));
 
 app.get('/api/memes', wrap(() => ({ tokens: memes.list(), feed: memes.feed.slice(-60).reverse() })));
+app.get('/api/memes/celebs', wrap(() => memes.celebReport(nowSec())));
 app.get('/api/memes/:id', wrap((req) => {
   const d = memes.detail(req.params.id);
   if (!d) throw new UserError('Token introuvable');
@@ -213,7 +214,7 @@ app.post('/api/chat', wrap((req) => {
 
 // ---------- Admin ----------
 const target = (req) => users.get(req.params.id) || (() => { throw new UserError('Joueur introuvable'); })();
-app.get('/api/admin/users', adminOnly(() => ({ players: users.leaderboard(onlineIds()).map((p) => ({ ...p, cash: users.get(p.id).acc.s.cash })) })));
+app.get('/api/admin/users', adminOnly(() => ({ nextCeleb: memes.celebFired === memes.celebWin ? celebWindow(nowSec()).end * 1000 : memes.celebAt * 1000, celebDone: memes.celebFired === memes.celebWin, players: users.leaderboard(onlineIds()).map((p) => ({ ...p, cash: users.get(p.id).acc.s.cash })) })));
 app.post('/api/admin/users/:id/money', adminOnly((req) => {
   const u = target(req);
   const a = Number(req.body?.amount);
@@ -337,6 +338,7 @@ setInterval(() => {
 
 memes.onEvent = (ev) => {
   if (Math.abs(nowSec() - ev.t) < 10) broadcast({ type: 'memeEvent', event: ev });
+  if (ev.kind === 'celeb' && ev.scheduled) { lastMemeSave = 0; save(); }
   if (ev.kind !== 'rug' && ev.kind !== 'devsell' && ev.kind !== 'graduate') return;
   for (const u of users.byId.values()) {
     const h = u.acc.s.memes?.[ev.id];

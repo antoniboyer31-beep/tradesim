@@ -555,6 +555,70 @@ function MyBagsStrip({ tokens, onOpen, current }) {
   );
 }
 
+const hm = (ms) => new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+const dayLabel = (ms) => new Date(ms).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
+
+function Announces({ onOpen }) {
+  const [d, setD] = useState(null);
+  const feedLen = useStore((s) => s.memeFeed.length);
+  useEffect(() => {
+    const load = () => api('GET', '/api/memes/celebs').then(setD).catch(() => {});
+    load();
+    const i = setInterval(load, 15000);
+    return () => clearInterval(i);
+  }, [feedLen]);
+  if (!d) return <p className="muted pad">Chargement…</p>;
+  const days = [];
+  for (const h of d.history) {
+    const k = dayLabel(h.t);
+    if (!days.length || days[days.length - 1][0] !== k) days.push([k, []]);
+    days[days.length - 1][1].push(h);
+  }
+  const doneToday = d.slots.filter((s) => s.status === 'done').length;
+  return (
+    <>
+      <div className="panel pad">
+        <div className="panel-title"><span>🗓️ Tweets du jour, par tranche de 2 h</span><span className="small muted">{doneToday} / 12 · remis à zéro à minuit</span></div>
+        <p className="small muted">Il y a exactement un tweet de célébrité par tranche de 2 heures, à un moment imprévisible. Quand le tweet d'une tranche est passé, inutile d'en attendre un autre avant la tranche suivante.</p>
+        <div className="slots">
+          {d.slots.map((s) => (
+            <div key={s.start} className={cls('slot', s.status)} onClick={() => s.tweet && onOpen(s.tweet.id)}>
+              <b>{hm(s.start)} – {hm(s.end).replace('00:00', '24:00')}</b>
+              {s.status === 'done' && <span>✅ {hm(s.tweet.t)} · {s.tweet.emoji} ${s.tweet.ticker}<br /><small>x{(s.tweet.athMcap / s.tweet.startMcap).toFixed(1)} max{s.tweet.rugged ? ' · 💀 rug' : ''}</small></span>}
+              {s.status === 'current' && <span>⏳ En cours : le tweet peut tomber à tout moment !</span>}
+              {s.status === 'upcoming' && <span className="muted">🔒 À venir</span>}
+              {s.status === 'missed' && <span className="muted">— Aucun tweet (site en pause)</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="panel pad">
+        <div className="panel-title"><span>📢 Historique des annonces (7 derniers jours)</span><span className="small muted">{d.history.length} tweet{d.history.length > 1 ? 's' : ''}</span></div>
+        {days.length ? days.map(([day, list]) => (
+          <div key={day} className="ann-day">
+            <h3>{day}</h3>
+            {list.map((h) => (
+              <div key={h.t + '-' + h.id} className="ann-row" onClick={() => h.alive && onOpen(h.id)}>
+                <span className="mono muted">{hm(h.t)}</span>
+                <div className="tw-av sm">{h.celeb.name[0]}</div>
+                <div className="ann-txt">
+                  <div><b>{h.celeb.name}</b> <span className="muted small">{h.celeb.handle}</span> {!h.scheduled && <span className="tag">bonus admin</span>}</div>
+                  <div>« {h.celeb.tweet} »</div>
+                </div>
+                <div className="ann-res">
+                  <span>{h.emoji} <b>${h.ticker}</b></span>
+                  <small className="mono">{fmtCompact(h.startMcap)} $ → plus haut {fmtCompact(h.athMcap)} $ <b className="up">x{(h.athMcap / h.startMcap).toFixed(1)}</b></small>
+                  <small className={h.rugged ? 'down' : 'muted'}>{h.rugged ? '💀 rug pull' : h.alive ? `Maintenant : ${fmtCompact(h.mcap)} $` : 'token disparu'}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        )) : <p className="muted small">Aucune annonce pour l'instant. La prochaine tombera dans la tranche de 2 h en cours.</p>}
+      </div>
+    </>
+  );
+}
+
 export default function MemeZone() {
   const tokens = useStore((s) => s.memes);
   const account = useStore((s) => s.account);
@@ -582,13 +646,14 @@ export default function MemeZone() {
         </div>
       </div>
       <div className="meme-tabs">
-        {[['board', '🚀 Tokens'], ['bags', '🎒 Mes bags'], ['tools', '🧰 Outils degen'], ['guide', '📚 Guide & astuces']].map(([k, l]) => (
+        {[['board', '🚀 Tokens'], ['announces', '📢 Annonces'], ['bags', '🎒 Mes bags'], ['tools', '🧰 Outils degen'], ['guide', '📚 Guide & astuces']].map(([k, l]) => (
           <button key={k} className={cls(tab === k && !open && 'on')} onClick={() => { setTab(k); setOpen(null); }}>{l}{k === 'bags' && held.size ? ` (${held.size})` : ''}</button>
         ))}
       </div>
       <MyBagsStrip tokens={tokens} onOpen={openTok} current={open} />
       {open ? <TokenView key={open} id={open} onBack={() => setOpen(null)} />
         : tab === 'board' ? <Board tokens={tokens} onOpen={openTok} held={held} />
+          : tab === 'announces' ? <Announces onOpen={openTok} />
           : tab === 'bags' ? <Bags tokens={tokens} onOpen={openTok} />
             : tab === 'tools' ? <MemeTools /> : <Guide />}
     </div>

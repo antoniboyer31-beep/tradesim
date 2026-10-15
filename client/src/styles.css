@@ -645,3 +645,15 @@ textarea { resize: vertical; }
 .celeb-buys .buy-btn { padding: 10px; font-size: 14px; }
 .celeb-foot { display: flex; justify-content: space-between; align-items: center; }
 @media (max-width: 760px) { .celeb-alert { right: 12px; bottom: 12px; } .podium-step { width: 105px; } .av-grid { grid-template-columns: repeat(6, 1fr); } }
+.slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.slot { background: var(--panel2); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; min-height: 74px; }
+.slot.done { border-color: rgba(22,199,132,.45); background: rgba(22,199,132,.08); cursor: pointer; }
+.slot.current { border-color: var(--down); background: rgba(234,57,67,.1); animation: celebPulse 1.6s ease-in-out infinite; }
+.slot.missed { opacity: .5; }
+.ann-day h3 { text-transform: capitalize; margin: 12px 0 6px; }
+.ann-row { display: grid; grid-template-columns: 50px 34px 1fr auto; gap: 10px; align-items: center; padding: 8px; border-radius: 9px; background: var(--panel2); margin-bottom: 6px; cursor: pointer; }
+.ann-row:hover { outline: 1px solid var(--accent); }
+.tw-av.sm { width: 32px; height: 32px; font-size: 14px; }
+.ann-res { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+@media (max-width: 1000px) { .slots { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 760px) { .slots { grid-template-columns: repeat(2, 1fr); } .ann-row { grid-template-columns: 42px 1fr; } .ann-row .tw-av { display: none; } .ann-res { grid-column: 1 / -1; align-items: flex-start; text-align: left; } }

@@ -43,6 +43,20 @@ const CELEBS = [
   ['Taylor Shift', '@taylorshift13', '95 M'], ['Cristiano Ronaldinho', '@CR7inho', '112 M'], ['Vitalik Butterin', '@VitalikButterin', '5,8 M'], ['CZ Binancé', '@cz_binance_fr', '9,4 M'],
   ['Squeezie Jr', '@SqueezieJr', '8,9 M'], ['Kanyé Est', '@kanyeest', '32 M'],
 ];
+const TZ = 'Europe/Paris';
+const CELEB_WINDOW = 2 * 3600;
+const tzOffset = (t) => {
+  const d = new Date(Math.floor(t) * 1000);
+  return Math.round((new Date(d.toLocaleString('en-US', { timeZone: TZ })) - new Date(d.toLocaleString('en-US', { timeZone: 'UTC' }))) / 1000);
+};
+// Une annonce par tranche de 2 h de l'heure de Paris (0 h-2 h, 2 h-4 h, …), à un moment aléatoire.
+export function celebWindow(t) {
+  const off = tzOffset(t);
+  const id = Math.floor((t + off) / CELEB_WINDOW);
+  const start = id * CELEB_WINDOW - off;
+  return { id, start, end: start + CELEB_WINDOW };
+}
+
 const TWEETS = [
   'je viens d\'acheter un peu de ${t} 👀', '${t} to the moon 🚀🚀🚀', 'mon chien adore ${t} 🐕', 'qui connaît ${t} ? 😂', '${t} > tout le reste',
   'je pense que ${t} va être énorme', 'gm ${t} gang ☀️', 'mon nouveau meme préféré : ${t}',
@@ -123,7 +137,27 @@ export class MemeMarket {
     this.onEvent = null;
     this.trades = {};
     this.playerTrades = {};
-    this.nextCeleb = 0;
+    this.celebWin = null;
+    this.celebAt = 0;
+    this.celebFired = null;
+    this.celebHistory = [];
+  }
+
+  celebReport(now) {
+    for (const h of this.celebHistory) {
+      const tk = this.find(h.id);
+      if (tk) { h.athMcap = Math.max(h.athMcap, tk.athMcap); h.rugged = tk.rugged; h.mcap = this.mcap(tk); h.alive = true; } else h.alive = false;
+    }
+    const off = celebWindow(now).start - celebWindow(now).id * CELEB_WINDOW;
+    const dayStart = Math.floor((now - off) / 86400) * 86400 + off;
+    const cur = celebWindow(now).id;
+    const slots = [];
+    for (let k = 0; k < 12; k++) {
+      const w = celebWindow(dayStart + k * CELEB_WINDOW + 60);
+      const done = this.celebHistory.find((h) => h.scheduled && h.win === w.id);
+      slots.push({ start: w.start * 1000, end: w.end * 1000, status: done ? 'done' : w.id < cur ? 'missed' : w.id === cur ? 'current' : 'upcoming', tweet: done || null });
+    }
+    return { slots, history: this.celebHistory.slice().reverse().map((h) => ({ ...h, t: h.t * 1000 })) };
   }
 
   recordPlayer(id, tr) {
@@ -132,14 +166,17 @@ export class MemeMarket {
     if (l.length > 300) l.splice(0, l.length - 250);
   }
 
-  spawnCeleb(t) {
+  spawnCeleb(t, scheduled = false) {
     const tk = this.spawn(t, 'celeb');
     const [name, handle, followers] = pick(CELEBS);
     const tweet = pick(TWEETS).replace('${t}', '$' + tk.ticker);
     tk.celeb = { name, handle, followers, tweet };
     tk.socials = { x: true, tg: true, web: Math.random() < 0.5 };
     tk.story = `Mentionné par ${name} (${followers} abonnés) sur X.`;
-    this.emit({ t, kind: 'celeb', id: tk.id, text: `🚨 ${name} (${handle}) vient de tweeter : « ${tweet} »`, celeb: tk.celeb, ticker: tk.ticker, emoji: tk.emoji, name: tk.name });
+    this.celebHistory.push({ t, id: tk.id, win: celebWindow(t).id, scheduled, ticker: tk.ticker, emoji: tk.emoji, name: tk.name, celeb: tk.celeb, startMcap: this.mcap(tk), athMcap: this.mcap(tk) });
+    const cutoff = t - 7 * 86400;
+    this.celebHistory = this.celebHistory.filter((h) => h.t >= cutoff);
+    this.emit({ t, kind: 'celeb', id: tk.id, text: `🚨 ${name} (${handle}) vient de tweeter : « ${tweet} »`, scheduled, celeb: tk.celeb, ticker: tk.ticker, emoji: tk.emoji, name: tk.name });
     return tk;
   }
 
@@ -189,8 +226,15 @@ export class MemeMarket {
   step(dt, t, live) {
     if (t - this.lastSpawn > 0 && Math.random() < dt / SPAWN_EVERY) { this.lastSpawn = t; this.spawn(t); }
     if (live) {
-      if (!this.nextCeleb) this.nextCeleb = t + rand(4, 12) * 60;
-      if (t >= this.nextCeleb) { this.nextCeleb = t + rand(25, 50) * 60; this.spawnCeleb(t); }
+      const w = celebWindow(t);
+      if (this.celebWin !== w.id) {
+        this.celebWin = w.id;
+        if (this.celebFired !== w.id) this.celebAt = rand(Math.max(w.start, t + 60), Math.max(w.start, t + 60, w.end - 180));
+      }
+      if (this.celebFired !== w.id && t >= this.celebAt) {
+        this.celebFired = w.id;
+        this.spawnCeleb(t, true);
+      }
     }
     const keepS5 = live || t >= this.s5From;
     for (const tk of this.tokens) {
@@ -404,7 +448,7 @@ export class MemeMarket {
     const pack = (arr) => arr.map((c) => [c[0], +c[1].toPrecision(6), +c[2].toPrecision(6), +c[3].toPrecision(6), +c[4].toPrecision(6), +c[5].toPrecision(3)]);
     const ids = new Set(this.tokens.map((x) => x.id));
     const pt = Object.fromEntries(Object.entries(this.playerTrades).filter(([id]) => ids.has(Number(id))));
-    yield `{"time":${this.time},"nextId":${this.nextId},"lastSpawn":${this.lastSpawn},"playerTrades":${JSON.stringify(pt)},"feed":${JSON.stringify(this.feed.slice(-100))},"tokens":[`;
+    yield `{"time":${this.time},"nextId":${this.nextId},"lastSpawn":${this.lastSpawn},"celeb":${JSON.stringify({ win: this.celebWin, at: this.celebAt, fired: this.celebFired, history: this.celebHistory })},"playerTrades":${JSON.stringify(pt)},"feed":${JSON.stringify(this.feed.slice(-100))},"tokens":[`;
     let first = true;
     for (const tk of this.tokens) {
       const phases = tk.phases.map((p) => ({ ...p, d: isFinite(p.d) ? p.d : -1 }));
@@ -420,6 +464,16 @@ export class MemeMarket {
     this.lastSpawn = data.lastSpawn;
     this.feed = data.feed || [];
     this.playerTrades = data.playerTrades || {};
+    if (data.celeb) { this.celebWin = data.celeb.win; this.celebAt = data.celeb.at; this.celebFired = data.celeb.fired; this.celebHistory = data.celeb.history || []; }
+    if (!this.celebHistory.length) {
+      const seen = new Set();
+      for (const ev of this.feed.filter((e) => e.kind === 'celeb' && e.celeb).sort((a, b) => a.t - b.t)) {
+        const win = celebWindow(ev.t).id;
+        const tk = this.find(ev.id);
+        this.celebHistory.push({ t: ev.t, id: ev.id, win, scheduled: !seen.has(win), ticker: ev.ticker, emoji: ev.emoji, name: ev.name, celeb: ev.celeb, startMcap: 5000, athMcap: tk ? tk.athMcap : 5000 });
+        seen.add(win);
+      }
+    }
     this.tokens = data.tokens.map((tk) => ({ ...tk, phaseEnd: tk.phaseEnd < 0 ? Infinity : tk.phaseEnd, phases: tk.phases.map((p) => ({ ...p, d: p.d < 0 ? Infinity : p.d })) }));
   }
 }
